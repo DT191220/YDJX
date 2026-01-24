@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
+const security_1 = require("../utils/security");
 const router = (0, express_1.Router)();
 // 获取权限树（完整树形结构）
 router.get('/tree', async (req, res) => {
@@ -57,8 +58,10 @@ router.get('/', async (req, res) => {
         // 获取总数
         const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM sys_permissions ${whereClause}`, params);
         const total = countResult[0].total;
-        // 获取权限列表
-        const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+        // 获取权限列表 - 使用白名单验证排序参数
+        const validColumns = ['id', 'permission_name', 'permission_code', 'permission_type', 'sort_order', 'status', 'created_at', 'updated_at'];
+        const { sortColumn, order } = (0, security_1.validateSortParams)(sortBy, sortOrder, validColumns, 'sort_order');
+        const orderClause = `ORDER BY ${sortColumn} ${order}`;
         const [permissions] = await database_1.default.query(`SELECT p.*, 
               (SELECT permission_name FROM sys_permissions WHERE id = p.parent_id) as parent_name
        FROM sys_permissions p
@@ -295,7 +298,9 @@ router.delete('/:id', async (req, res) => {
 function buildTree(list, parentId) {
     const result = [];
     for (const item of list) {
-        if (item.parent_id === parentId) {
+        // 处理parent_id为0或null的情况都作为顶级节点
+        const itemParentId = item.parent_id === 0 ? null : item.parent_id;
+        if (itemParentId === parentId) {
             const children = buildTree(list, item.id);
             if (children.length > 0) {
                 item.children = children;

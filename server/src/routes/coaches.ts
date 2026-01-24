@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -62,10 +63,12 @@ router.get('/', async (req: Request, res: Response) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取列表
+    // 获取列表 - 使用白名单验证排序参数
     const limitNum = Number(limit);
     const offsetNum = Number(offset);
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+    const validColumns = ['id', 'name', 'phone', 'gender', 'birth_date', 'age', 'license_type', 'teaching_subjects', 'employment_date', 'status', 'created_at', 'updated_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'id');
+    const orderClause = `ORDER BY ${sortColumn} ${order}`;
 
     const [coaches] = await pool.query(
       `SELECT id, name, id_card, phone, gender, 

@@ -22,14 +22,14 @@ export async function request<T = any>(
       headers,
     });
 
-    // 处理401未授权
-    if (response.status === 401) {
+    const data = await response.json();
+
+    // 处理401未授权（排除登录接口，登录失败应显示错误而非跳转）
+    if (response.status === 401 && !url.includes('/auth/login')) {
       clearAuth();
       window.location.href = '/login';
       throw new Error('未授权，请重新登录');
     }
-
-    const data = await response.json();
 
     // 检查业务逻辑错误
     if (!data.success) {

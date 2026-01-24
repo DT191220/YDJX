@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
+const security_1 = require("../utils/security");
 const router = (0, express_1.Router)();
 // 获取角色列表（支持分页、搜索、排序）
 router.get('/', async (req, res) => {
@@ -27,8 +28,10 @@ router.get('/', async (req, res) => {
         // 获取总数
         const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM sys_roles ${whereClause}`, params);
         const total = countResult[0].total;
-        // 获取角色列表
-        const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+        // 获取角色列表 - 使用白名单验证排序参数
+        const validColumns = ['id', 'role_name', 'role_code', 'status', 'sort_order', 'created_at', 'updated_at'];
+        const { sortColumn, order } = (0, security_1.validateSortParams)(sortBy, sortOrder, validColumns, 'id');
+        const orderClause = `ORDER BY ${sortColumn} ${order}`;
         const [roles] = await database_1.default.query(`SELECT id, role_name, role_code, description, status, sort_order, 
               created_at, updated_at
        FROM sys_roles 

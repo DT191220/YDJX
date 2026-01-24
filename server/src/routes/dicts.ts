@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -41,8 +42,10 @@ router.get('/types', async (req: Request, res: Response) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取字典类型列表
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+    // 获取字典类型列表 - 使用白名单验证排序参数
+    const validColumns = ['id', 'dict_name', 'dict_type', 'status', 'created_at', 'updated_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'id');
+    const orderClause = `ORDER BY ${sortColumn} ${order}`;
     const [types] = await pool.query(
       `SELECT id, dict_name, dict_type, status, description, created_at, updated_at
        FROM sys_dict_types 

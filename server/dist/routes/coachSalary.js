@@ -401,11 +401,14 @@ router.post('/refresh', async (req, res) => {
       `, [salary.coach_name, monthStart, monthEndStr]);
             const newStudentCount = newStudentResult[0]?.student_count || 0;
             // 重新计算工资
-            const baseSalary = salary.attendance_days * baseDailySalary;
+            const attendanceDays = Number(salary.attendance_days || 0);
+            const bonus = Number(salary.bonus || 0);
+            const deduction = Number(salary.deduction || 0);
+            const baseSalary = attendanceDays * baseDailySalary;
             const subject2Comm = subject2PassCount * subject2Commission;
             const subject3Comm = subject3PassCount * subject3Commission;
             const recruitmentComm = newStudentCount * recruitmentCommission;
-            const grossSalary = baseSalary + subject2Comm + subject3Comm + recruitmentComm + salary.bonus - salary.deduction;
+            const grossSalary = baseSalary + subject2Comm + subject3Comm + recruitmentComm + bonus - deduction;
             // 更新工资记录
             await database_1.default.query(`
         UPDATE coach_monthly_salary 

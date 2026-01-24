@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -76,8 +77,10 @@ router.get('/', async (req: Request, res: Response) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取权限列表
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+    // 获取权限列表 - 使用白名单验证排序参数
+    const validColumns = ['id', 'permission_name', 'permission_code', 'permission_type', 'sort_order', 'status', 'created_at', 'updated_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'sort_order');
+    const orderClause = `ORDER BY ${sortColumn} ${order}`;
     const [permissions] = await pool.query(
       `SELECT p.*, 
               (SELECT permission_name FROM sys_permissions WHERE id = p.parent_id) as parent_name

@@ -3,6 +3,7 @@ import pool from '../config/database';
 import bcrypt from 'bcryptjs';
 import CryptoJS from 'crypto-js';
 import { authMiddleware } from '../middleware/auth';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -68,8 +69,10 @@ router.get('/', authMiddleware, async (req, res) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取列表
-    const orderClause = `ORDER BY u.${sortBy} ${sortOrder}`;
+    // 获取列表 - 使用白名单验证排序参数
+    const validColumns = ['id', 'username', 'real_name', 'phone', 'email', 'status', 'created_at', 'last_login_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'created_at');
+    const orderClause = `ORDER BY u.${sortColumn} ${order}`;
     params.push(Number(limit), Number(offset));
 
     const [users] = await pool.query(

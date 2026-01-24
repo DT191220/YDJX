@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -40,8 +41,10 @@ router.get('/', async (req: Request, res: Response) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取角色列表
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+    // 获取角色列表 - 使用白名单验证排序参数
+    const validColumns = ['id', 'role_name', 'role_code', 'status', 'sort_order', 'created_at', 'updated_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'id');
+    const orderClause = `ORDER BY ${sortColumn} ${order}`;
     const [roles] = await pool.query(
       `SELECT id, role_name, role_code, description, status, sort_order, 
               created_at, updated_at

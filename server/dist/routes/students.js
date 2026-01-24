@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
+const security_1 = require("../utils/security");
 const router = (0, express_1.Router)();
 // 身份证号校验函数
 function validateIdCard(idCard) {
@@ -72,8 +73,10 @@ router.get('/', async (req, res) => {
         // 获取总数
         const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM students ${whereClause}`, params);
         const total = countResult[0].total;
-        // 获取学员列表
-        const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+        // 获取学员列表 - 使用白名单验证排序参数
+        const validColumns = ['id', 'name', 'phone', 'gender', 'birth_date', 'age', 'enrollment_status', 'enrollment_date', 'coach_name', 'class_type_id', 'license_type', 'created_at', 'updated_at'];
+        const { sortColumn, order } = (0, security_1.validateSortParams)(sortBy, sortOrder, validColumns, 'id');
+        const orderClause = `ORDER BY ${sortColumn} ${order}`;
         const [students] = await database_1.default.query(`SELECT s.id, s.name, s.id_card, s.phone, s.gender, 
               DATE_FORMAT(s.birth_date, '%Y-%m-%d') as birth_date, 
               s.age, s.address, 
@@ -84,7 +87,7 @@ router.get('/', async (req, res) => {
               s.emergency_contact, s.emergency_phone, s.coach_id, s.coach_name,
               s.coach_subject2_name, s.coach_subject3_name,
               s.class_type_id, ct.name as class_type_name, s.license_type,
-              s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.payment_status,
+              s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.account_balance, s.payment_status,
               (s.contract_amount - s.discount_amount) as payable_amount,
               s.registrar_id, s.registrar_name, s.created_at, s.updated_at
        FROM students s
@@ -127,7 +130,7 @@ router.get('/:id', async (req, res) => {
               s.emergency_contact, s.emergency_phone, s.coach_id, s.coach_name,
               s.coach_subject2_name, s.coach_subject3_name,
               s.class_type_id, ct.name as class_type_name, s.license_type,
-              s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.payment_status,
+              s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.account_balance, s.payment_status,
               (s.contract_amount - s.discount_amount) as payable_amount,
               s.registrar_id, s.registrar_name, s.created_at, s.updated_at
        FROM students s
@@ -181,6 +184,21 @@ router.post('/', async (req, res) => {
                 success: false,
                 message: '该身份证号已存在'
             });
+        }
+        // 当报名状态为"报名未缴费"时，报名日期和驾照类型必填
+        if (status === '报名未缴费') {
+            if (!enrollment_date) {
+                return res.status(400).json({
+                    success: false,
+                    message: '报名状态为"报名未缴费"时，报名日期为必填项'
+                });
+            }
+            if (!license_type) {
+                return res.status(400).json({
+                    success: false,
+                    message: '报名状态为"报名未缴费"时，驾照类型为必填项'
+                });
+            }
         }
         // 从身份证号提取出生日期和年龄
         const { birthDate, age } = extractInfoFromIdCard(id_card);
@@ -276,23 +294,73 @@ router.put('/:id', async (req, res) => {
         }
         // 从身份证号提取出生日期和年龄
         const { birthDate, age } = extractInfoFromIdCard(id_card);
+        // 检查学员当前状态（用于校验报名状态和合同金额）
+        const [currentStudentRows] = await database_1.default.query('SELECT enrollment_status, payment_status, contract_amount, enrollment_date, license_type FROM students WHERE id = ?', [id]);
+        const currentStudent = currentStudentRows[0];
+        // 校验报名状态：如果学员已产生缴费行为，不允许手动修改报名状态
+        if (currentStudent.payment_status && currentStudent.payment_status !== '未缴费') {
+            // 检查是否尝试修改报名状态
+            if (status && status !== currentStudent.enrollment_status) {
+                return res.status(400).json({
+                    success: false,
+                    message: '该学员已产生缴费记录，报名状态由缴费状态自动同步，不允许手动修改'
+                });
+            }
+        }
+        // 当报名状态为"报名未缴费"时，报名日期和驾照类型必填
+        if (status === '报名未缴费') {
+            if (!enrollment_date) {
+                return res.status(400).json({
+                    success: false,
+                    message: '报名状态为"报名未缴费"时，报名日期为必填项'
+                });
+            }
+            if (!license_type) {
+                return res.status(400).json({
+                    success: false,
+                    message: '报名状态为"报名未缴费"时，驾照类型为必填项'
+                });
+            }
+        }
+        // 校验：如果学员当前状态为"报名未缴费"，不允许修改报名状态、报名日期、驾照类型
+        if (currentStudent.enrollment_status === '报名未缴费') {
+            // 检查是否尝试修改报名状态
+            if (status && status !== currentStudent.enrollment_status) {
+                return res.status(400).json({
+                    success: false,
+                    message: '已完成报名的学员，报名状态不允许手动修改'
+                });
+            }
+            // 检查是否尝试修改报名日期
+            const currentEnrollmentDate = currentStudent.enrollment_date
+                ? new Date(currentStudent.enrollment_date).toISOString().split('T')[0]
+                : null;
+            if (enrollment_date && enrollment_date !== currentEnrollmentDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: '已完成报名的学员，报名日期不允许修改'
+                });
+            }
+            // 检查是否尝试修改驾照类型
+            if (license_type && license_type !== currentStudent.license_type) {
+                return res.status(400).json({
+                    success: false,
+                    message: '已完成报名的学员，驾照类型不允许修改'
+                });
+            }
+        }
         // 如果更新了班型，获取班型的合同金额
         // 注意：只有在学员还未报名时才更新合同金额，已报名学员的合同金额不受班型价格变更影响
         let contractAmount = null;
         if (class_type_id) {
-            // 检查学员当前的报名状态
-            const [currentStudentRows] = await database_1.default.query('SELECT enrollment_status, contract_amount FROM students WHERE id = ?', [id]);
-            if (currentStudentRows.length > 0) {
-                const currentStudent = currentStudentRows[0];
-                // 只有在学员未报名时（咨询中、预约报名）才允许更新合同金额
-                if (currentStudent.enrollment_status === '咨询中' || currentStudent.enrollment_status === '预约报名') {
-                    const [classTypes] = await database_1.default.query('SELECT contract_amount FROM class_types WHERE id = ?', [class_type_id]);
-                    if (classTypes.length > 0) {
-                        contractAmount = classTypes[0].contract_amount;
-                    }
+            // 只有在学员未报名时（咨询中、预约报名）才允许更新合同金额
+            if (currentStudent.enrollment_status === '咨询中' || currentStudent.enrollment_status === '预约报名') {
+                const [classTypes] = await database_1.default.query('SELECT contract_amount FROM class_types WHERE id = ?', [class_type_id]);
+                if (classTypes.length > 0) {
+                    contractAmount = classTypes[0].contract_amount;
                 }
-                // 如果学员已报名，保留原有合同金额（历史价格）
             }
+            // 如果学员已报名，保留原有合同金额（历史价格）
         }
         // 更新学员信息
         await database_1.default.query(`UPDATE students 
@@ -362,6 +430,91 @@ router.delete('/:id', async (req, res) => {
     }
     catch (error) {
         console.error('删除学员失败:', error);
+        res.status(500).json({
+            success: false,
+            message: '服务器错误'
+        });
+    }
+});
+// 获取招生统计数据
+router.get('/statistics/enrollment', async (req, res) => {
+    try {
+        const { year } = req.query;
+        const targetYear = year ? parseInt(year) : new Date().getFullYear();
+        // 月度招生统计（按报名日期统计，排除咨询中和预约报名状态）
+        const [monthlyData] = await database_1.default.query(`
+      SELECT 
+        DATE_FORMAT(enrollment_date, '%Y-%m') as month,
+        COUNT(*) as count
+      FROM students
+      WHERE YEAR(enrollment_date) = ?
+        AND enrollment_status NOT IN ('咨询中', '预约报名')
+      GROUP BY DATE_FORMAT(enrollment_date, '%Y-%m')
+      ORDER BY month
+    `, [targetYear]);
+        // 按班型统计
+        const [byClassType] = await database_1.default.query(`
+      SELECT 
+        ct.name as class_type_name,
+        COUNT(*) as count
+      FROM students s
+      LEFT JOIN class_types ct ON s.class_type_id = ct.id
+      WHERE YEAR(s.enrollment_date) = ?
+        AND s.enrollment_status NOT IN ('咨询中', '预约报名')
+      GROUP BY s.class_type_id, ct.name
+      ORDER BY count DESC
+    `, [targetYear]);
+        // 按教练统计
+        const [byCoach] = await database_1.default.query(`
+      SELECT 
+        coach_name,
+        COUNT(*) as count
+      FROM students
+      WHERE YEAR(enrollment_date) = ?
+        AND enrollment_status NOT IN ('咨询中', '预约报名')
+        AND coach_name IS NOT NULL AND coach_name != ''
+      GROUP BY coach_name
+      ORDER BY count DESC
+    `, [targetYear]);
+        // 年度总计
+        const [yearTotal] = await database_1.default.query(`
+      SELECT COUNT(*) as total
+      FROM students
+      WHERE YEAR(enrollment_date) = ?
+        AND enrollment_status NOT IN ('咨询中', '预约报名')
+    `, [targetYear]);
+        // 获取上一年同期数据用于同比计算
+        const [lastYearTotal] = await database_1.default.query(`
+      SELECT COUNT(*) as total
+      FROM students
+      WHERE YEAR(enrollment_date) = ?
+        AND enrollment_status NOT IN ('咨询中', '预约报名')
+    `, [targetYear - 1]);
+        // 构建完整的12个月数据
+        const monthlyStats = [];
+        for (let m = 1; m <= 12; m++) {
+            const monthStr = `${targetYear}-${String(m).padStart(2, '0')}`;
+            const found = monthlyData.find(item => item.month === monthStr);
+            monthlyStats.push({
+                month: monthStr,
+                monthName: `${m}月`,
+                count: found ? found.count : 0
+            });
+        }
+        res.json({
+            success: true,
+            data: {
+                year: targetYear,
+                yearTotal: yearTotal[0]?.total || 0,
+                lastYearTotal: lastYearTotal[0]?.total || 0,
+                monthlyStats,
+                byClassType,
+                byCoach
+            }
+        });
+    }
+    catch (error) {
+        console.error('获取招生统计数据失败:', error);
         res.status(500).json({
             success: false,
             message: '服务器错误'

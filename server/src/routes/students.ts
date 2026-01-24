@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
+import { validateSortParams } from '../utils/security';
 
 const router = Router();
 
@@ -100,8 +101,10 @@ router.get('/', async (req: Request, res: Response) => {
     );
     const total = (countResult as any[])[0].total;
 
-    // 获取学员列表
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+    // 获取学员列表 - 使用白名单验证排序参数
+    const validColumns = ['id', 'name', 'phone', 'gender', 'birth_date', 'age', 'enrollment_status', 'enrollment_date', 'coach_name', 'class_type_id', 'license_type', 'created_at', 'updated_at'];
+    const { sortColumn, order } = validateSortParams(sortBy as string, sortOrder as string, validColumns, 'id');
+    const orderClause = `ORDER BY ${sortColumn} ${order}`;
     const [students] = await pool.query(
       `SELECT s.id, s.name, s.id_card, s.phone, s.gender, 
               DATE_FORMAT(s.birth_date, '%Y-%m-%d') as birth_date, 

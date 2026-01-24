@@ -6,8 +6,40 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const crypto_js_1 = __importDefault(require("crypto-js"));
 const auth_1 = require("../middleware/auth");
+const security_1 = require("../utils/security");
 const router = (0, express_1.Router)();
+// 加密密钥（与前端保持一致）
+const ENCRYPT_KEY = 'YuanDongDrivingSchool2024!@#';
+// 解密密码
+function decryptPassword(encryptedData) {
+    try {
+        const key = crypto_js_1.default.enc.Utf8.parse(ENCRYPT_KEY.padEnd(32, '0').slice(0, 32));
+        const iv = crypto_js_1.default.enc.Utf8.parse(ENCRYPT_KEY.slice(0, 16).padEnd(16, '0'));
+        const decrypted = crypto_js_1.default.AES.decrypt(encryptedData, key, {
+            iv: iv,
+            mode: crypto_js_1.default.mode.CBC,
+            padding: crypto_js_1.default.pad.Pkcs7
+        });
+        const decryptedStr = decrypted.toString(crypto_js_1.default.enc.Utf8);
+        if (!decryptedStr) {
+            return null;
+        }
+        const parsed = JSON.parse(decryptedStr);
+        // 验证时间戳（5分钟内有效）
+        const now = Date.now();
+        const timeDiff = Math.abs(now - parsed.timestamp);
+        if (timeDiff > 5 * 60 * 1000) {
+            return null;
+        }
+        return parsed.password;
+    }
+    catch (error) {
+        console.error('密码解密失败:', error);
+        return null;
+    }
+}
 // 获取用户列表
 router.get('/', auth_1.authMiddleware, async (req, res) => {
     try {
@@ -26,8 +58,10 @@ router.get('/', auth_1.authMiddleware, async (req, res) => {
         // 获取总数
         const [countResult] = await database_1.default.query(`SELECT COUNT(DISTINCT u.id) as total FROM sys_users u ${whereClause}`, params);
         const total = countResult[0].total;
-        // 获取列表
-        const orderClause = `ORDER BY u.${sortBy} ${sortOrder}`;
+        // 获取列表 - 使用白名单验证排序参数
+        const validColumns = ['id', 'username', 'real_name', 'phone', 'email', 'status', 'created_at', 'last_login_at'];
+        const { sortColumn, order } = (0, security_1.validateSortParams)(sortBy, sortOrder, validColumns, 'created_at');
+        const orderClause = `ORDER BY u.${sortColumn} ${order}`;
         params.push(Number(limit), Number(offset));
         const [users] = await database_1.default.query(`SELECT 
         u.id, u.username, u.real_name, u.phone, u.email, 
@@ -74,9 +108,18 @@ router.get('/:id', auth_1.authMiddleware, async (req, res) => {
 // 创建用户
 router.post('/', auth_1.authMiddleware, async (req, res) => {
     try {
-        const { username, password, real_name, phone, email, status = '启用', role_ids } = req.body;
+        const { username, password, real_name, phone, email, status = '启用', role_ids, passwordEncrypted } = req.body;
         if (!username || !password || !real_name) {
             return res.status(400).json({ success: false, message: '用户名、密码和真实姓名不能为空' });
+        }
+        // 解密密码
+        let plainPassword = password;
+        if (passwordEncrypted) {
+            const decrypted = decryptPassword(password);
+            if (!decrypted) {
+                return res.status(400).json({ success: false, message: '密码解密失败或请求已过期，请重试' });
+            }
+            plainPassword = decrypted;
         }
         // 检查用户名是否已存在
         const [existing] = await database_1.default.query('SELECT id FROM sys_users WHERE username = ?', [username]);
@@ -84,7 +127,7 @@ router.post('/', auth_1.authMiddleware, async (req, res) => {
             return res.status(400).json({ success: false, message: '用户名已存在' });
         }
         // 加密密码
-        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+        const hashedPassword = await bcryptjs_1.default.hash(plainPassword, 10);
         const connection = await database_1.default.getConnection();
         try {
             await connection.beginTransaction();
@@ -116,7 +159,7 @@ router.post('/', auth_1.authMiddleware, async (req, res) => {
 router.put('/:id', auth_1.authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        const { real_name, phone, email, status, password, role_ids } = req.body;
+        const { real_name, phone, email, status, password, role_ids, passwordEncrypted } = req.body;
         const connection = await database_1.default.getConnection();
         try {
             await connection.beginTransaction();
@@ -139,7 +182,18 @@ router.put('/:id', auth_1.authMiddleware, async (req, res) => {
                 params.push(status);
             }
             if (password) {
-                const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+                // 解密密码
+                let plainPassword = password;
+                if (passwordEncrypted) {
+                    const decrypted = decryptPassword(password);
+                    if (!decrypted) {
+                        await connection.rollback();
+                        connection.release();
+                        return res.status(400).json({ success: false, message: '密码解密失败或请求已过期，请重试' });
+                    }
+                    plainPassword = decrypted;
+                }
+                const hashedPassword = await bcryptjs_1.default.hash(plainPassword, 10);
                 updates.push('password = ?');
                 params.push(hashedPassword);
             }

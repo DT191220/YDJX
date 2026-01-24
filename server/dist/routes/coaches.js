@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
+const security_1 = require("../utils/security");
 const router = (0, express_1.Router)();
 // 辅助函数：验证身份证号
 function validateIdCard(idCard) {
@@ -43,10 +44,12 @@ router.get('/', async (req, res) => {
         // 获取总数
         const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM coaches ${whereClause}`, params);
         const total = countResult[0].total;
-        // 获取列表
+        // 获取列表 - 使用白名单验证排序参数
         const limitNum = Number(limit);
         const offsetNum = Number(offset);
-        const orderClause = `ORDER BY ${sortBy} ${sortOrder}`;
+        const validColumns = ['id', 'name', 'phone', 'gender', 'birth_date', 'age', 'license_type', 'teaching_subjects', 'employment_date', 'status', 'created_at', 'updated_at'];
+        const { sortColumn, order } = (0, security_1.validateSortParams)(sortBy, sortOrder, validColumns, 'id');
+        const orderClause = `ORDER BY ${sortColumn} ${order}`;
         const [coaches] = await database_1.default.query(`SELECT id, name, id_card, phone, gender, 
               DATE_FORMAT(birth_date, '%Y-%m-%d') as birth_date,
               age, address, license_type, teaching_certificate,

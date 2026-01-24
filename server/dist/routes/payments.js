@@ -46,7 +46,7 @@ router.post('/', async (req, res) => {
             });
         }
         // 检查学员是否存在
-        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount FROM students WHERE id = ?', [student_id]);
+        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, account_balance FROM students WHERE id = ?', [student_id]);
         if (studentRows.length === 0) {
             await connection.rollback();
             return res.status(404).json({
@@ -57,11 +57,20 @@ router.post('/', async (req, res) => {
         const student = studentRows[0];
         // 插入缴费记录
         const [result] = await connection.query('INSERT INTO payment_records (student_id, amount, payment_date, payment_method, operator, notes) VALUES (?, ?, ?, ?, ?, ?)', [student_id, amountNum, payment_date, payment_method, operator, notes]);
-        // 更新学员的实收金额和欠费金额
+        // 更新学员的实收金额、账户余额和欠费金额
         const newActualAmount = parseFloat(student.actual_amount) + amountNum;
         const contractAmount = parseFloat(student.contract_amount);
         const discountAmount = parseFloat(student.discount_amount || 0);
-        const newDebtAmount = contractAmount - newActualAmount - discountAmount;
+        const currentBalance = parseFloat(student.account_balance || 0);
+        // 计算新的欠费金额和账户余额
+        // 欠费 = 合同金额 - 实收金额 - 减免金额
+        let newDebtAmount = contractAmount - newActualAmount - discountAmount;
+        let newAccountBalance = currentBalance;
+        // 如果欠费为负数，说明有超额支付，转入账户余额
+        if (newDebtAmount < 0) {
+            newAccountBalance = currentBalance + Math.abs(newDebtAmount);
+            newDebtAmount = 0;
+        }
         // 自动更新缴费状态（考虑减免金额）
         let paymentStatus = '未缴费';
         let enrollmentStatus = '报名未缴费';
@@ -74,7 +83,7 @@ router.post('/', async (req, res) => {
             enrollmentStatus = '报名部分缴费';
         }
         // 同步更新缴费状态(payment_status)和报名状态(enrollment_status)
-        await connection.query('UPDATE students SET actual_amount = ?, debt_amount = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDebtAmount, paymentStatus, enrollmentStatus, student_id]);
+        await connection.query('UPDATE students SET actual_amount = ?, debt_amount = ?, account_balance = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDebtAmount, newAccountBalance, paymentStatus, enrollmentStatus, student_id]);
         await connection.commit();
         res.json({
             success: true,
@@ -82,6 +91,7 @@ router.post('/', async (req, res) => {
                 id: result.insertId,
                 new_actual_amount: newActualAmount,
                 new_debt_amount: newDebtAmount,
+                new_account_balance: newAccountBalance,
                 payment_status: paymentStatus
             },
             message: '缴费记录创建成功'
@@ -121,7 +131,7 @@ router.post('/refund', async (req, res) => {
             });
         }
         // 检查学员是否存在并获取当前金额信息
-        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, payment_status FROM students WHERE id = ?', [student_id]);
+        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, account_balance, payment_status FROM students WHERE id = ?', [student_id]);
         if (studentRows.length === 0) {
             await connection.rollback();
             return res.status(404).json({
@@ -132,6 +142,7 @@ router.post('/refund', async (req, res) => {
         const student = studentRows[0];
         const currentActualAmount = parseFloat(student.actual_amount);
         const discountAmount = parseFloat(student.discount_amount || 0);
+        const currentBalance = parseFloat(student.account_balance || 0);
         // 验证退费金额不能超过实收金额
         if (refundAmount > currentActualAmount) {
             await connection.rollback();
@@ -140,14 +151,23 @@ router.post('/refund', async (req, res) => {
                 message: `退费金额不能超过实收金额 ¥${currentActualAmount.toFixed(2)}`
             });
         }
-        // 计算退费后的金额: 欠费 = 合同金额 - 实收金额 - 减免金额
+        // 计算退费后的金额
         const newActualAmount = currentActualAmount - refundAmount;
         const contractAmount = parseFloat(student.contract_amount);
-        const newDebtAmount = contractAmount - newActualAmount - discountAmount;
+        // 退费时需要从账户余额中先扣除
+        let newAccountBalance = currentBalance;
+        let amountToRefundFromBalance = Math.min(refundAmount, currentBalance);
+        newAccountBalance = Math.max(0, currentBalance - refundAmount);
+        // 计算新的欠费: 欠费 = 合同金额 - 实收金额 - 减免金额
+        let newDebtAmount = contractAmount - newActualAmount - discountAmount;
+        // 如果有从余额退款，需要增加对应的欠费
+        if (amountToRefundFromBalance > 0) {
+            newDebtAmount = Math.max(0, newDebtAmount);
+        }
         // 退费后缴费状态设置为"已退费"
         const paymentStatus = '已退费';
-        // 更新学员的实收金额、欠费金额、缴费状态和报名状态
-        await connection.query('UPDATE students SET actual_amount = ?, debt_amount = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDebtAmount, paymentStatus, '已退费', student_id]);
+        // 更新学员的实收金额、欠费金额、账户余额、缴费状态和报名状态
+        await connection.query('UPDATE students SET actual_amount = ?, debt_amount = ?, account_balance = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDebtAmount, newAccountBalance, paymentStatus, '已退费', student_id]);
         // 记录退费信息（作为负数缴费记录）
         await connection.query('INSERT INTO payment_records (student_id, amount, payment_date, payment_method, operator, notes) VALUES (?, ?, CURDATE(), ?, ?, ?)', [student_id, -refundAmount, '其他', operator, `退费：${notes || '学员退费'}`]);
         await connection.commit();
@@ -156,6 +176,7 @@ router.post('/refund', async (req, res) => {
             data: {
                 new_actual_amount: newActualAmount,
                 new_debt_amount: newDebtAmount,
+                new_account_balance: newAccountBalance,
                 payment_status: paymentStatus,
                 refund_amount: refundAmount
             },
@@ -196,7 +217,7 @@ router.post('/discount', async (req, res) => {
             });
         }
         // 检查学员是否存在并获取当前金额信息
-        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, payment_status FROM students WHERE id = ?', [student_id]);
+        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, account_balance, payment_status FROM students WHERE id = ?', [student_id]);
         if (studentRows.length === 0) {
             await connection.rollback();
             return res.status(404).json({
@@ -208,6 +229,7 @@ router.post('/discount', async (req, res) => {
         const currentActualAmount = parseFloat(student.actual_amount);
         const currentDiscountAmount = parseFloat(student.discount_amount || 0);
         const contractAmount = parseFloat(student.contract_amount);
+        const currentBalance = parseFloat(student.account_balance || 0);
         // 累加减免金额
         const newDiscountAmount = currentDiscountAmount + discountAmount;
         // 验证减免金额不能超过合同金额
@@ -219,7 +241,13 @@ router.post('/discount', async (req, res) => {
             });
         }
         // 计算新的欠费金额: 欠费 = 合同金额 - 实收金额 - 减免金额
-        const newDebtAmount = contractAmount - currentActualAmount - newDiscountAmount;
+        let newDebtAmount = contractAmount - currentActualAmount - newDiscountAmount;
+        let newAccountBalance = currentBalance;
+        // 如果欠费为负数，说明有超额支付，转入账户余额
+        if (newDebtAmount < 0) {
+            newAccountBalance = currentBalance + Math.abs(newDebtAmount);
+            newDebtAmount = 0;
+        }
         // 重新计算缴费状态和报名状态
         let paymentStatus = '未缴费';
         let enrollmentStatus = '报名未缴费';
@@ -231,8 +259,8 @@ router.post('/discount', async (req, res) => {
             paymentStatus = '部分缴费';
             enrollmentStatus = '报名部分缴费';
         }
-        // 同步更新缴费状态、报名状态和减免金额
-        await connection.query('UPDATE students SET discount_amount = ?, debt_amount = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newDiscountAmount, newDebtAmount, paymentStatus, enrollmentStatus, student_id]);
+        // 同步更新缴费状态、报名状态、减免金额和账户余额
+        await connection.query('UPDATE students SET discount_amount = ?, debt_amount = ?, account_balance = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newDiscountAmount, newDebtAmount, newAccountBalance, paymentStatus, enrollmentStatus, student_id]);
         // 记录减免信息（作为负数缴费记录）
         await connection.query('INSERT INTO payment_records (student_id, amount, payment_date, payment_method, operator, notes) VALUES (?, ?, CURDATE(), ?, ?, ?)', [student_id, -discountAmount, '其他', operator, `减免：${notes || '费用减免'}`]);
         await connection.commit();
@@ -241,6 +269,7 @@ router.post('/discount', async (req, res) => {
             data: {
                 new_discount_amount: newDiscountAmount,
                 new_debt_amount: newDebtAmount,
+                new_account_balance: newAccountBalance,
                 payment_status: paymentStatus,
                 discount_amount: discountAmount
             },
@@ -276,7 +305,7 @@ router.delete('/:id', async (req, res) => {
         }
         const record = recordRows[0];
         // 获取学员信息
-        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount FROM students WHERE id = ?', [record.student_id]);
+        const [studentRows] = await connection.query('SELECT id, contract_amount, actual_amount, discount_amount, account_balance FROM students WHERE id = ?', [record.student_id]);
         if (studentRows.length === 0) {
             await connection.rollback();
             return res.status(404).json({
@@ -286,24 +315,44 @@ router.delete('/:id', async (req, res) => {
         }
         const student = studentRows[0];
         const discountAmount = parseFloat(student.discount_amount || 0);
-        // 检查是否是减免记录（金额为负数）
-        const isDiscountRecord = parseFloat(record.amount) < 0;
+        const currentBalance = parseFloat(student.account_balance || 0);
+        const currentActualAmount = parseFloat(student.actual_amount);
+        // 检查记录类型
+        const recordAmount = parseFloat(record.amount);
+        const isDiscountRecord = recordAmount < 0 && record.notes && record.notes.includes('减免');
+        const isRefundRecord = recordAmount < 0 && record.notes && record.notes.includes('退费');
         // 删除缴费记录
         await connection.query('DELETE FROM payment_records WHERE id = ?', [id]);
         let newDiscountAmount = discountAmount;
-        let newActualAmount;
+        let newActualAmount = currentActualAmount;
+        let newAccountBalance = currentBalance;
         if (isDiscountRecord) {
             // 如果是减免记录，回退减免金额
-            newDiscountAmount = discountAmount + parseFloat(record.amount); // record.amount是负数，相加就是减少
-            newActualAmount = parseFloat(student.actual_amount);
+            newDiscountAmount = discountAmount + recordAmount; // recordAmount是负数，相加就是减少
+        }
+        else if (isRefundRecord) {
+            // 如果是退费记录，需要恢复退费的金额
+            // 退费时从实收金额中扣除了，删除退费记录应该加回实收金额
+            newActualAmount = currentActualAmount - recordAmount; // recordAmount是负数，减去就是加上
+            // 同时需要恢复退费时从账户余额中扣除的部分（如果有）
+            // 由于退费逻辑可能从余额中扣除，这里不需要特殊处理余额，会在后续重新计算
         }
         else {
             // 如果是普通缴费记录，回退实收金额
-            newActualAmount = parseFloat(student.actual_amount) - parseFloat(record.amount);
+            newActualAmount = currentActualAmount - recordAmount;
         }
-        // 回退金额: 欠费 = 合同金额 - 实收金额 - 减免金额
+        // 回退金额后重新计算: 欠费 = 合同金额 - 实收金额 - 减免金额
         const contractAmount = parseFloat(student.contract_amount);
-        const newDebtAmount = contractAmount - newActualAmount - newDiscountAmount;
+        let newDebtAmount = contractAmount - newActualAmount - newDiscountAmount;
+        // 重新计算账户余额：如果实收+减免超过合同，超出部分进入余额
+        if (newDebtAmount < 0) {
+            newAccountBalance = Math.abs(newDebtAmount);
+            newDebtAmount = 0;
+        }
+        else {
+            // 如果有欠费，余额应该为0（除非之前有其他来源的余额）
+            newAccountBalance = 0;
+        }
         // 重新计算缴费状态和报名状态
         let paymentStatus = '未缴费';
         let enrollmentStatus = '报名未缴费';
@@ -315,8 +364,8 @@ router.delete('/:id', async (req, res) => {
             paymentStatus = '部分缴费';
             enrollmentStatus = '报名部分缴费';
         }
-        // 同步更新缴费状态、报名状态和减免金额
-        await connection.query('UPDATE students SET actual_amount = ?, discount_amount = ?, debt_amount = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDiscountAmount, newDebtAmount, paymentStatus, enrollmentStatus, record.student_id]);
+        // 同步更新缴费状态、报名状态、减免金额和账户余额
+        await connection.query('UPDATE students SET actual_amount = ?, discount_amount = ?, debt_amount = ?, account_balance = ?, payment_status = ?, enrollment_status = ? WHERE id = ?', [newActualAmount, newDiscountAmount, newDebtAmount, newAccountBalance, paymentStatus, enrollmentStatus, record.student_id]);
         await connection.commit();
         res.json({
             success: true,
