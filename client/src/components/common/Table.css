@@ -1,0 +1,50 @@
+.table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.data-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: white;
+  font-size: 0.9rem;
+}
+
+.data-table tbody tr {
+  border-bottom: 1px solid #eee;
+  transition: background 0.2s;
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: #f9f9f9;
+}
+
+.data-table tbody tr:hover {
+  background: #f0f0f0;
+}
+
+.data-table td {
+  padding: 1rem;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.table-loading,
+.table-empty {
+  padding: 3rem;
+  text-align: center;
+  color: #999;
+  font-size: 1rem;
+}

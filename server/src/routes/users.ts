@@ -1,0 +1,355 @@
+import { Router } from 'express';
+import pool from '../config/database';
+import bcrypt from 'bcryptjs';
+import CryptoJS from 'crypto-js';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+
+// 加密密钥（与前端保持一致）
+const ENCRYPT_KEY = 'YuanDongDrivingSchool2024!@#';
+
+// 解密密码
+function decryptPassword(encryptedData: string): string | null {
+  try {
+    const key = CryptoJS.enc.Utf8.parse(ENCRYPT_KEY.padEnd(32, '0').slice(0, 32));
+    const iv = CryptoJS.enc.Utf8.parse(ENCRYPT_KEY.slice(0, 16).padEnd(16, '0'));
+    
+    const decrypted = CryptoJS.AES.decrypt(encryptedData, key, {
+      iv: iv,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+    
+    const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+    if (!decryptedStr) {
+      return null;
+    }
+    
+    const parsed = JSON.parse(decryptedStr);
+    
+    // 验证时间戳（5分钟内有效）
+    const now = Date.now();
+    const timeDiff = Math.abs(now - parsed.timestamp);
+    if (timeDiff > 5 * 60 * 1000) {
+      return null;
+    }
+    
+    return parsed.password;
+  } catch (error) {
+    console.error('密码解密失败:', error);
+    return null;
+  }
+}
+
+// 获取用户列表
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const { limit = '10', offset = '0', keyword, status, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+
+    const params: any[] = [];
+    let whereClause = 'WHERE 1=1';
+
+    if (keyword) {
+      whereClause += ' AND (u.username LIKE ? OR u.real_name LIKE ? OR u.phone LIKE ?)';
+      const keywordPattern = `%${keyword}%`;
+      params.push(keywordPattern, keywordPattern, keywordPattern);
+    }
+
+    if (status) {
+      whereClause += ' AND u.status = ?';
+      params.push(status);
+    }
+
+    // 获取总数
+    const [countResult] = await pool.query(
+      `SELECT COUNT(DISTINCT u.id) as total FROM sys_users u ${whereClause}`,
+      params
+    );
+    const total = (countResult as any[])[0].total;
+
+    // 获取列表
+    const orderClause = `ORDER BY u.${sortBy} ${sortOrder}`;
+    params.push(Number(limit), Number(offset));
+
+    const [users] = await pool.query(
+      `SELECT 
+        u.id, u.username, u.real_name, u.phone, u.email, 
+        u.status, u.created_at, u.last_login_at,
+        GROUP_CONCAT(r.role_name) as roles
+      FROM sys_users u
+      LEFT JOIN sys_user_roles ur ON u.id = ur.user_id
+      LEFT JOIN sys_roles r ON ur.role_id = r.id
+      ${whereClause}
+      GROUP BY u.id
+      ${orderClause}
+      LIMIT ? OFFSET ?`,
+      params
+    );
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        limit: Number(limit),
+        offset: Number(offset),
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error('获取用户列表失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 获取单个用户
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [users] = await pool.query(
+      'SELECT id, username, real_name, phone, email, avatar, status, created_at, updated_at, last_login_at FROM sys_users WHERE id = ?',
+      [id]
+    );
+
+    if ((users as any[]).length === 0) {
+      return res.status(404).json({ success: false, message: '用户不存在' });
+    }
+
+    res.json({ success: true, data: (users as any[])[0] });
+  } catch (error) {
+    console.error('获取用户失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 创建用户
+router.post('/', authMiddleware, async (req, res) => {
+  try {
+    const { username, password, real_name, phone, email, status = '启用', role_ids, passwordEncrypted } = req.body;
+
+    if (!username || !password || !real_name) {
+      return res.status(400).json({ success: false, message: '用户名、密码和真实姓名不能为空' });
+    }
+
+    // 解密密码
+    let plainPassword = password;
+    if (passwordEncrypted) {
+      const decrypted = decryptPassword(password);
+      if (!decrypted) {
+        return res.status(400).json({ success: false, message: '密码解密失败或请求已过期，请重试' });
+      }
+      plainPassword = decrypted;
+    }
+
+    // 检查用户名是否已存在
+    const [existing] = await pool.query('SELECT id FROM sys_users WHERE username = ?', [username]);
+    if ((existing as any[]).length > 0) {
+      return res.status(400).json({ success: false, message: '用户名已存在' });
+    }
+
+    // 加密密码
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // 插入用户
+      const [result] = await connection.query(
+        'INSERT INTO sys_users (username, password, real_name, phone, email, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [username, hashedPassword, real_name, phone, email, status]
+      );
+
+      const userId = (result as any).insertId;
+
+      // 分配角色
+      if (role_ids && role_ids.length > 0) {
+        const roleValues = role_ids.map((roleId: number) => [userId, roleId]);
+        await connection.query(
+          'INSERT INTO sys_user_roles (user_id, role_id) VALUES ?',
+          [roleValues]
+        );
+      }
+
+      await connection.commit();
+
+      res.json({ success: true, message: '用户创建成功', data: { id: userId } });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('创建用户失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 更新用户
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { real_name, phone, email, status, password, role_ids, passwordEncrypted } = req.body;
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const updates: string[] = [];
+      const params: any[] = [];
+
+      if (real_name) {
+        updates.push('real_name = ?');
+        params.push(real_name);
+      }
+      if (phone !== undefined) {
+        updates.push('phone = ?');
+        params.push(phone);
+      }
+      if (email !== undefined) {
+        updates.push('email = ?');
+        params.push(email);
+      }
+      if (status) {
+        updates.push('status = ?');
+        params.push(status);
+      }
+      if (password) {
+        // 解密密码
+        let plainPassword = password;
+        if (passwordEncrypted) {
+          const decrypted = decryptPassword(password);
+          if (!decrypted) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({ success: false, message: '密码解密失败或请求已过期，请重试' });
+          }
+          plainPassword = decrypted;
+        }
+        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+        updates.push('password = ?');
+        params.push(hashedPassword);
+      }
+
+      if (updates.length > 0) {
+        params.push(id);
+        await connection.query(
+          `UPDATE sys_users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`,
+          params
+        );
+      }
+
+      // 更新角色
+      if (role_ids !== undefined) {
+        await connection.query('DELETE FROM sys_user_roles WHERE user_id = ?', [id]);
+        if (role_ids.length > 0) {
+          const roleValues = role_ids.map((roleId: number) => [id, roleId]);
+          await connection.query(
+            'INSERT INTO sys_user_roles (user_id, role_id) VALUES ?',
+            [roleValues]
+          );
+        }
+      }
+
+      await connection.commit();
+
+      res.json({ success: true, message: '用户更新成功' });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('更新用户失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 删除用户
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.query('DELETE FROM sys_users WHERE id = ?', [id]);
+
+    res.json({ success: true, message: '用户删除成功' });
+  } catch (error) {
+    console.error('删除用户失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 更新用户状态
+router.put('/:id/status', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    await pool.query('UPDATE sys_users SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
+
+    res.json({ success: true, message: '状态更新成功' });
+  } catch (error) {
+    console.error('更新状态失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 获取用户角色
+router.get('/:id/roles', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [roles] = await pool.query(
+      `SELECT r.* FROM sys_roles r
+       INNER JOIN sys_user_roles ur ON r.id = ur.role_id
+       WHERE ur.user_id = ?`,
+      [id]
+    );
+
+    res.json({ success: true, data: roles });
+  } catch (error) {
+    console.error('获取用户角色失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// 分配用户角色
+router.put('/:id/roles', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role_ids } = req.body;
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      await connection.query('DELETE FROM sys_user_roles WHERE user_id = ?', [id]);
+
+      if (role_ids && role_ids.length > 0) {
+        const roleValues = role_ids.map((roleId: number) => [id, roleId]);
+        await connection.query(
+          'INSERT INTO sys_user_roles (user_id, role_id) VALUES ?',
+          [roleValues]
+        );
+      }
+
+      await connection.commit();
+
+      res.json({ success: true, message: '角色分配成功' });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('分配角色失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+export default router;
