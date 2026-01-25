@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { studentService } from '../../services/student';
 import { classTypeService } from '../../services/payment';
 import { coachService } from '../../services/coach';
-import { Student, StudentFormData, EnrollmentStatus, LicenseType, EDITABLE_ENROLLMENT_STATUS } from '../../types/student';
+import { Student, StudentFormData, EnrollmentStatus, LicenseType } from '../../types/student';
 import { ClassType } from '../../types/payment';
 import { Coach } from '../../types/coach';
 import Table from '../../components/common/Table';
@@ -362,6 +362,26 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
   // 使用字典获取下拉选项
   const { options: licenseTypeOptions } = useDict('license_type');
   const { options: drivingExpOptions } = useDict('driving_experience');
+  const { options: enrollmentStatusOptions } = useDict('enrollment_status');
+  
+  // 可手动编辑的报名状态列表（从字典获取并过滤）
+  const editableStatusOptions = useMemo(() => {
+    const options = enrollmentStatusOptions.filter(opt => 
+      ['咨询中', '预约报名', '报名未缴费'].includes(opt.dict_value)
+    );
+    // 如果编辑学员且其当前状态不在可选列表中（可能已被禁用），添加当前状态选项以便正确显示
+    if (student?.status && !options.some(opt => opt.dict_value === student.status)) {
+      options.unshift({ 
+        id: -1, 
+        dict_type: 'enrollment_status', 
+        dict_value: student.status, 
+        dict_label: student.status, 
+        sort_order: 0, 
+        status: '禁用' 
+      });
+    }
+    return options;
+  }, [enrollmentStatusOptions, student?.status]);
 
   useEffect(() => {
     fetchClassTypes();
@@ -632,8 +652,8 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as EnrollmentStatus })}
                 >
-                  {EDITABLE_ENROLLMENT_STATUS.map((status) => (
-                    <option key={status} value={status}>{status}</option>
+                  {editableStatusOptions.map((opt) => (
+                    <option key={opt.dict_value} value={opt.dict_value}>{opt.dict_label}</option>
                   ))}
                 </select>
               )}

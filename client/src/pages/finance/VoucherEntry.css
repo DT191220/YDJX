@@ -1,0 +1,191 @@
+.voucher-form {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.voucher-header {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.voucher-header .form-row {
+  display: flex;
+  gap: 20px;
+}
+
+.voucher-header .form-group {
+  flex: 1;
+}
+
+.voucher-header .form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.voucher-header .form-group input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.voucher-items {
+  margin-top: 20px;
+}
+
+.voucher-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.voucher-table th,
+.voucher-table td {
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  text-align: left;
+}
+
+.voucher-table th {
+  background: #fafafa;
+  font-weight: 500;
+  color: #333;
+}
+
+.voucher-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.entry-type-select,
+.subject-select,
+.summary-input,
+.amount-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.entry-type-select {
+  text-align: center;
+}
+
+.amount-input {
+  text-align: right;
+}
+
+.amount-input.debit:focus {
+  border-color: #1890ff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.amount-input.credit:focus {
+  border-color: #52c41a;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.2);
+}
+
+.empty-cell {
+  display: block;
+  text-align: center;
+  color: #bfbfbf;
+}
+
+.total-row {
+  background: #fafafa;
+  font-weight: bold;
+}
+
+.total-row td {
+  padding: 15px 12px;
+}
+
+.total-debit {
+  color: #1890ff;
+  text-align: right;
+}
+
+.total-credit {
+  color: #52c41a;
+  text-align: right;
+}
+
+.balance-warning {
+  background: #fff2f0;
+}
+
+.balance-warning td {
+  padding: 10px;
+  font-weight: bold;
+}
+
+.item-actions {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+}
+
+.btn-lg {
+  padding: 12px 30px;
+  font-size: 16px;
+}
+
+.btn-info {
+  background: #1890ff;
+  color: #fff;
+  border: none;
+}
+
+.btn-info:hover {
+  background: #40a9ff;
+}
+
+.btn-success {
+  background: #52c41a;
+  color: #fff;
+  border: none;
+}
+
+.btn-success:hover {
+  background: #73d13d;
+}
+
+.text-blue {
+  color: #1890ff;
+}
+
+.text-green {
+  color: #52c41a;
+}
+
+.badge-blue {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.badge-red {
+  background: #fff2f0;
+  color: #ff4d4f;
+  border: 1px solid #ffccc7;
+}
+
+.badge-purple {
+  background: #f9f0ff;
+  color: #722ed1;
+  border: 1px solid #d3adf7;
+}
+
+.badge-orange {
+  background: #fff7e6;
+  color: #fa8c16;
+  border: 1px solid #ffd591;
+}

@@ -8,6 +8,8 @@ import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { usePagination } from '../../hooks/usePagination';
+import { useDict } from '../../hooks/useDict';
+import { publish, EVENTS } from '../../utils/events';
 import { ColumnDef } from '@tanstack/react-table';
 import './ExamRegistrations.css';
 
@@ -39,6 +41,11 @@ export default function ExamRegistrations() {
   });
 
   const { limit, offset, total, setTotal, page, pages, setPage, setLimit } = usePagination();
+
+  // 使用字典获取考试结果选项
+  const { options: examResultOptions } = useDict('exam_result');
+  // 可选的考试结果（排除"待考试"）
+  const selectableResultOptions = examResultOptions.filter(opt => opt.dict_value !== '待考试');
 
   useEffect(() => {
     fetchRegistrations();
@@ -153,6 +160,8 @@ export default function ExamRegistrations() {
       alert('考试报名成功');
       setShowModal(false);
       fetchRegistrations();
+      // 通知考试安排页面刷新已报考人数
+      publish(EVENTS.EXAM_REGISTRATION_CHANGED);
     } catch (error: any) {
       alert('操作失败: ' + (error.response?.data?.message || error.message));
     }
@@ -179,6 +188,8 @@ export default function ExamRegistrations() {
       alert('删除考试报名成功');
       setDeleteId(null);
       fetchRegistrations();
+      // 通知考试安排页面刷新已报考人数
+      publish(EVENTS.EXAM_REGISTRATION_CHANGED);
     } catch (error: any) {
       alert('删除失败: ' + (error.response?.data?.message || error.message));
     }
@@ -275,9 +286,9 @@ export default function ExamRegistrations() {
 
           <select value={resultFilter} onChange={(e) => setResultFilter(e.target.value)}>
             <option value="">全部结果</option>
-            <option value="待考试">待考试</option>
-            <option value="通过">通过</option>
-            <option value="未通过">未通过</option>
+            {examResultOptions.map(opt => (
+              <option key={opt.dict_value} value={opt.dict_value}>{opt.dict_label}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -374,8 +385,9 @@ export default function ExamRegistrations() {
                 onChange={(e) => setResultData({ ...resultData, exam_result: e.target.value as '通过' | '未通过' })}
                 required
               >
-                <option value="通过">通过</option>
-                <option value="未通过">未通过</option>
+                {selectableResultOptions.map(opt => (
+                  <option key={opt.dict_value} value={opt.dict_value}>{opt.dict_label}</option>
+                ))}
               </select>
             </div>
 

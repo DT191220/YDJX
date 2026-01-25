@@ -90,7 +90,14 @@ INSERT INTO sys_permissions (permission_name, permission_code, permission_type, 
 ('班型-编辑', 'basic:class-types:update', 'button', 54, '', '', 54, '启用'),
 ('班型-删除', 'basic:class-types:delete', 'button', 54, '', '', 55, '启用');
 
--- 7. 系统管理（父级ID=59）
+-- 7. 财务管理（父级ID=59）
+INSERT INTO sys_permissions (permission_name, permission_code, permission_type, parent_id, path, icon, sort_order, status) VALUES
+('财务管理', 'finance', '菜单', 0, '/finance', 'dollar', 55, '启用'),
+('科目管理', 'finance:subjects', '菜单', 59, '/finance/subjects', '', 56, '启用'),
+('凭证管理', 'finance:vouchers', '菜单', 59, '/finance/vouchers', '', 57, '启用'),
+('凭证录入', 'finance:voucher-entry', '菜单', 59, '/finance/voucher-entry', '', 58, '启用');
+
+-- 8. 系统管理（父级ID=63）
 INSERT INTO sys_permissions (permission_name, permission_code, permission_type, parent_id, path, icon, sort_order, status) VALUES
 ('系统管理', 'system', 'menu', 0, '/system', 'setting', 100, '启用'),
 ('用户管理', 'system:users', 'menu', 59, '/system/users', '', 101, '启用'),

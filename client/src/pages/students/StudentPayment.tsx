@@ -1,14 +1,25 @@
 import { useState, useEffect } from 'react';
 import { paymentService, classTypeService } from '../../services/payment';
 import { studentService } from '../../services/student';
+import { financeService, HeadquarterConfig } from '../../services/finance';
 import { StudentPaymentInfo, PaymentRecord, PaymentMethod, ClassType } from '../../types/payment';
 import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { usePagination } from '../../hooks/usePagination';
+import { useDict } from '../../hooks/useDict';
 import { ColumnDef } from '@tanstack/react-table';
 import '../system/Students.css';
+
+// 上缴确认信息接口
+interface SubmitConfirmInfo {
+  student: StudentPaymentInfo;
+  config: HeadquarterConfig | null;
+  finalReceipt: number;      // 最终实收 = 实收金额 + 账户余额
+  submitAmount: number;       // 上缴金额
+  profit: number;            // 利润 = 最终实收 - 上缴金额
+}
 
 export default function StudentPayment() {
   const [students, setStudents] = useState<StudentPaymentInfo[]>([]);
@@ -20,10 +31,13 @@ export default function StudentPayment() {
   const [showRecordsModal, setShowRecordsModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentPaymentInfo | null>(null);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   const [classTypes, setClassTypes] = useState<ClassType[]>([]);
   const [deletePaymentId, setDeletePaymentId] = useState<number | null>(null);
+  const [submitConfirmInfo, setSubmitConfirmInfo] = useState<SubmitConfirmInfo | null>(null);
+  const [submitConfirmLoading, setSubmitConfirmLoading] = useState(false);
 
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
@@ -46,6 +60,10 @@ export default function StudentPayment() {
   });
 
   const { limit, offset, total, setTotal, page, pages, setPage, setLimit } = usePagination();
+
+  // 使用字典获取下拉选项
+  const { options: paymentStatusOptions } = useDict('payment_status');
+  const { options: paymentMethodOptions } = useDict('payment_method');
 
   useEffect(() => {
     fetchStudents();
@@ -138,6 +156,62 @@ export default function StudentPayment() {
       notes: ''
     });
     setShowDiscountModal(true);
+  };
+
+  // 上缴确认功能
+  const handleSubmitConfirm = async (student: StudentPaymentInfo) => {
+    setSubmitConfirmLoading(true);
+    try {
+      // 获取该学员班型对应的上缴配置
+      let config: HeadquarterConfig | null = null;
+      
+      if (student.class_type_id) {
+        // 先尝试获取班型专属配置
+        const response = await financeService.getActiveHeadquarterConfig(student.class_type_id);
+        config = response.data || null;
+      }
+      
+      // 如果没有班型专属配置，获取全局默认配置
+      if (!config) {
+        const response = await financeService.getActiveHeadquarterConfig();
+        config = response.data || null;
+      }
+      
+      // 计算最终实收 = 实收金额 + 账户余额
+      const actualAmount = parseFloat(student.actual_amount || '0');
+      const accountBalance = parseFloat(student.account_balance || '0');
+      const finalReceipt = actualAmount + accountBalance;
+      
+      // 计算上缴金额
+      let submitAmount = 0;
+      if (config) {
+        if (config.config_type === 'ratio') {
+          // 按比例计算：使用合同金额 * 比例
+          const contractAmount = parseFloat(student.contract_amount || '0');
+          submitAmount = contractAmount * Number(config.ratio || 0);
+        } else {
+          // 固定金额
+          submitAmount = Number(config.fixed_amount || 0);
+        }
+      }
+      
+      // 计算利润 = 最终实收 - 上缴金额
+      const profit = finalReceipt - submitAmount;
+      
+      setSubmitConfirmInfo({
+        student,
+        config,
+        finalReceipt,
+        submitAmount,
+        profit
+      });
+      setShowSubmitConfirmModal(true);
+    } catch (error) {
+      console.error('获取上缴配置失败:', error);
+      alert('获取上缴配置失败');
+    } finally {
+      setSubmitConfirmLoading(false);
+    }
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -378,7 +452,7 @@ export default function StudentPayment() {
     },
     {
       header: '操作',
-      size: 280,
+      size: 350,
       cell: ({ row }) => (
         <div className="action-buttons">
           <button
@@ -407,6 +481,14 @@ export default function StudentPayment() {
             disabled={row.original.payment_status === '已退费' || parseFloat(row.original.actual_amount || 0) === 0}
           >
             退费
+          </button>
+          <button
+            onClick={() => handleSubmitConfirm(row.original)}
+            className="btn btn-sm"
+            style={{ backgroundColor: '#722ed1', color: '#fff' }}
+            disabled={submitConfirmLoading}
+          >
+            上缴确认
           </button>
         </div>
       ),
@@ -485,10 +567,9 @@ export default function StudentPayment() {
               onChange={(e) => setPaymentStatusFilter(e.target.value)}
             >
               <option value="">全部</option>
-              <option value="未缴费">未缴费</option>
-              <option value="部分缴费">部分缴费</option>
-              <option value="已缴费">已缴费</option>
-              <option value="已退费">已退费</option>
+              {paymentStatusOptions.map(opt => (
+                <option key={opt.dict_value} value={opt.dict_value}>{opt.dict_label}</option>
+              ))}
             </select>
           </div>
           <button onClick={handleSearch} className="btn btn-primary">
@@ -543,12 +624,9 @@ export default function StudentPayment() {
               onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value as PaymentMethod })}
               required
             >
-              <option value="现金">现金</option>
-              <option value="POS">POS</option>
-              <option value="微信">微信</option>
-              <option value="支付宝">支付宝</option>
-              <option value="银行转账">银行转账</option>
-              <option value="其他">其他</option>
+              {paymentMethodOptions.map(opt => (
+                <option key={opt.dict_value} value={opt.dict_value}>{opt.dict_label}</option>
+              ))}
             </select>
           </div>
           <div className="form-group">
@@ -787,6 +865,92 @@ export default function StudentPayment() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* 上缴确认Modal */}
+      <Modal
+        title={`上缴确认 - ${submitConfirmInfo?.student.name}`}
+        visible={showSubmitConfirmModal}
+        onClose={() => setShowSubmitConfirmModal(false)}
+        width="500px"
+      >
+        {submitConfirmInfo && (
+          <div style={{ padding: '10px 0' }}>
+            {/* 学员基本信息 */}
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>学员信息</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '14px' }}>
+                <div><strong>姓名：</strong>{submitConfirmInfo.student.name}</div>
+                <div><strong>班型：</strong>{submitConfirmInfo.student.class_type_name || '-'}</div>
+                <div><strong>合同金额：</strong>¥{parseFloat(submitConfirmInfo.student.contract_amount || '0').toFixed(2)}</div>
+                <div><strong>实收金额：</strong>¥{parseFloat(submitConfirmInfo.student.actual_amount || '0').toFixed(2)}</div>
+                <div><strong>账户余额：</strong>¥{parseFloat(submitConfirmInfo.student.account_balance || '0').toFixed(2)}</div>
+                <div><strong>减免金额：</strong>¥{parseFloat(submitConfirmInfo.student.discount_amount || '0').toFixed(2)}</div>
+              </div>
+            </div>
+
+            {/* 上缴配置信息 */}
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#e6f7ff', borderRadius: '4px', border: '1px solid #91d5ff' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#1890ff' }}>上缴配置</h4>
+              {submitConfirmInfo.config ? (
+                <div style={{ fontSize: '14px' }}>
+                  <div style={{ marginBottom: '4px' }}>
+                    <strong>配置名称：</strong>{submitConfirmInfo.config.config_name}
+                  </div>
+                  <div style={{ marginBottom: '4px' }}>
+                    <strong>适用范围：</strong>
+                    <span className={`badge ${submitConfirmInfo.config.class_type_id ? 'badge-blue' : 'badge-purple'}`} style={{ marginLeft: '4px' }}>
+                      {submitConfirmInfo.config.class_type_name || '全局默认'}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>计算方式：</strong>
+                    {submitConfirmInfo.config.config_type === 'ratio' 
+                      ? `按比例 ${(Number(submitConfirmInfo.config.ratio || 0) * 100).toFixed(2)}%`
+                      : `固定金额 ¥${Number(submitConfirmInfo.config.fixed_amount || 0).toFixed(2)}`
+                    }
+                  </div>
+                </div>
+              ) : (
+                <div style={{ color: '#ff4d4f' }}>未配置上缴规则</div>
+              )}
+            </div>
+
+            {/* 利润计算结果 */}
+            <div style={{ padding: '16px', background: '#f6ffed', borderRadius: '8px', border: '2px solid #52c41a' }}>
+              <h4 style={{ margin: '0 0 16px 0', color: '#52c41a', textAlign: 'center' }}>利润核算</h4>
+              <div style={{ fontSize: '14px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span>最终实收（实收金额 + 账户余额）：</span>
+                  <strong style={{ color: '#1890ff' }}>¥{submitConfirmInfo.finalReceipt.toFixed(2)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span>总校上缴金额：</span>
+                  <strong style={{ color: '#f5222d' }}>- ¥{submitConfirmInfo.submitAmount.toFixed(2)}</strong>
+                </div>
+                <div style={{ borderTop: '1px dashed #ccc', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 'bold' }}>报名费利润：</span>
+                  <strong style={{ 
+                    fontSize: '20px', 
+                    color: submitConfirmInfo.profit >= 0 ? '#52c41a' : '#f5222d' 
+                  }}>
+                    ¥{submitConfirmInfo.profit.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button 
+                onClick={() => setShowSubmitConfirmModal(false)} 
+                className="btn btn-primary"
+                style={{ padding: '8px 40px' }}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

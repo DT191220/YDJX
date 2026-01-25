@@ -6,6 +6,7 @@ import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { usePagination } from '../../hooks/usePagination';
+import { clearDictCache } from '../../hooks/useDict';
 import { ColumnDef } from '@tanstack/react-table';
 import './Dicts.css';
 
@@ -122,6 +123,8 @@ export default function Dicts() {
       await dictService.deleteDictData(deleteDataId);
       if (selectedType) {
         fetchDictData(selectedType.id);
+        // 清除该字典类型的缓存，使其他页面能立即获取最新数据
+        clearDictCache(selectedType.dict_type);
       }
       setDeleteDataId(null);
     } catch (error) {
@@ -328,10 +331,13 @@ export default function Dicts() {
         <DictDataFormModal
           dictData={editingData}
           dictTypeId={selectedType.id}
+          dictType={selectedType.dict_type}
           onClose={() => setShowDataModal(false)}
           onSuccess={() => {
             setShowDataModal(false);
             fetchDictData(selectedType.id);
+            // 清除该字典类型的缓存，使其他页面能立即获取最新数据
+            clearDictCache(selectedType.dict_type);
           }}
         />
       )}
@@ -463,11 +469,12 @@ function DictTypeFormModal({ dictType, onClose, onSuccess }: DictTypeFormModalPr
 interface DictDataFormModalProps {
   dictData: DictData | null;
   dictTypeId: number;
+  dictType: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function DictDataFormModal({ dictData, dictTypeId, onClose, onSuccess }: DictDataFormModalProps) {
+function DictDataFormModal({ dictData, dictTypeId, dictType: _dictType, onClose, onSuccess }: DictDataFormModalProps) {
   const [formData, setFormData] = useState<DictDataFormData>({
     dict_type_id: dictTypeId,
     dict_label: dictData?.dict_label || '',

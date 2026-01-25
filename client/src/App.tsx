@@ -8,6 +8,7 @@ import Users from './pages/system/Users'
 import Roles from './pages/system/Roles'
 import Permissions from './pages/system/Permissions'
 import Dicts from './pages/system/Dicts'
+import Menus from './pages/system/Menus'
 import Students from './pages/system/Students'
 import StudentPayment from './pages/students/StudentPayment'
 import EnrollmentStatistics from './pages/students/EnrollmentStatistics'
@@ -21,6 +22,11 @@ import ExamStatistics from './pages/exam/ExamStatistics'
 import Coaches from './pages/coach/Coaches'
 import SalaryConfig from './pages/coach/SalaryConfig'
 import CoachSalary from './pages/coach/CoachSalary'
+import Subjects from './pages/finance/Subjects'
+import Vouchers from './pages/finance/Vouchers'
+import VoucherEntry from './pages/finance/VoucherEntry'
+import HeadquarterConfig from './pages/finance/HeadquarterConfig'
+import Reports from './pages/finance/Reports'
 
 function App() {
   return (
@@ -38,6 +44,8 @@ function App() {
                     <Route path="/students/entry" element={<Students />} />
                     <Route path="/students/payment" element={<StudentPayment />} />
                     <Route path="/students/statistics" element={<EnrollmentStatistics />} />
+                    <Route path="/students/headquarter-config" element={<HeadquarterConfig />} />
+                    <Route path="/students/class-types" element={<ClassTypes />} />
                     <Route path="/exam/venues" element={<ExamVenues />} />
                     <Route path="/exam/schedules" element={<ExamSchedules />} />
                     <Route path="/exam/registrations" element={<ExamRegistrations />} />
@@ -45,13 +53,17 @@ function App() {
                     <Route path="/coaches/info" element={<Coaches />} />
                     <Route path="/coaches/salary-config" element={<SalaryConfig />} />
                     <Route path="/coaches/salary" element={<CoachSalary />} />
+                    <Route path="/finance/subjects" element={<Subjects />} />
+                    <Route path="/finance/vouchers" element={<Vouchers />} />
+                    <Route path="/finance/voucher-entry" element={<VoucherEntry />} />
+                    <Route path="/finance/reports" element={<Reports />} />
                     <Route path="/learning/progress" element={<StudentProgress />} />
                     <Route path="/learning/plans" element={<StudyPlans />} />
                     <Route path="/system/users" element={<Users />} />
                     <Route path="/system/roles" element={<Roles />} />
                     <Route path="/system/permissions" element={<Permissions />} />
                     <Route path="/system/dicts" element={<Dicts />} />
-                    <Route path="/system/class-types" element={<ClassTypes />} />
+                    <Route path="/system/menus" element={<Menus />} />
                   </Routes>
                 </Layout>
               </ProtectedRoute>

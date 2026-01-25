@@ -107,7 +107,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // 查询用户角色
     const [roles] = await pool.query(
-      `SELECT r.role_code FROM sys_roles r
+      `SELECT r.role_code, r.role_name FROM sys_roles r
        INNER JOIN sys_user_roles ur ON r.id = ur.role_id
        WHERE ur.user_id = ? LIMIT 1`,
       [user.id]
@@ -115,6 +115,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const roleList = roles as any[];
     const roleCode = roleList.length > 0 ? roleList[0].role_code : 'USER';
+    const roleName = roleList.length > 0 ? roleList[0].role_name : '普通用户';
 
     // 查询用户权限（通过角色关联）
     const [permissions] = await pool.query(
@@ -150,7 +151,8 @@ router.post('/login', async (req: Request, res: Response) => {
           id: user.id,
           username: user.username,
           realName: user.real_name,
-          role: roleCode
+          role: roleCode,
+          roleName: roleName
         },
         permissions: permissionCodes
       }

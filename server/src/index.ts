@@ -20,6 +20,8 @@ import examWarningRoutes from './routes/examWarnings';
 import coachRoutes from './routes/coaches';
 import salaryConfigRoutes from './routes/salaryConfig';
 import coachSalaryRoutes from './routes/coachSalary';
+import financeRoutes from './routes/finance';
+import menuRoutes from './routes/menus';
 
 dotenv.config();
 
@@ -56,6 +58,8 @@ app.use('/api/exam-warnings', examWarningRoutes);
 app.use('/api/coaches', coachRoutes);
 app.use('/api/salary-config', salaryConfigRoutes);
 app.use('/api/coach-salary', coachSalaryRoutes);
+app.use('/api/finance', financeRoutes);
+app.use('/api/menus', menuRoutes);
 
 // 健康检查接口
 app.get('/api/health', (req, res) => {

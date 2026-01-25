@@ -37,6 +37,7 @@ export interface ExamSchedule {
   venue_address?: string;
   capacity: number;
   arranged_count: number;
+  registered_count?: number;  // 实时统计的已报考人数
   person_in_charge?: string;
   notes?: string;
   created_at: string;
@@ -48,7 +49,6 @@ export interface ExamScheduleFormData {
   exam_date: string;
   exam_type: ExamType;
   venue_id: number;
-  capacity: number;
   person_in_charge?: string;
   notes?: string;
 }

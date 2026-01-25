@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { generateVoucherNo, getActiveHeadquarterConfig, calculateHeadquarterAmount } from './finance';
 
 const router = Router();
 
@@ -55,7 +56,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // 检查学员是否存在
     const [studentRows] = await connection.query<RowDataPacket[]>(
-      'SELECT id, contract_amount, actual_amount, discount_amount, debt_amount, account_balance FROM students WHERE id = ?',
+      'SELECT id, name, class_type_id, contract_amount, actual_amount, discount_amount, debt_amount, account_balance FROM students WHERE id = ?',
       [student_id]
     );
 
@@ -109,6 +110,53 @@ router.post('/', async (req: Request, res: Response) => {
       'UPDATE students SET actual_amount = ?, debt_amount = ?, account_balance = ?, payment_status = ?, enrollment_status = ? WHERE id = ?',
       [newActualAmount, newDebtAmount, newAccountBalance, paymentStatus, enrollmentStatus, student_id]
     );
+
+    // === 自动创建财务凭证（集成总校上缴配置） ===
+    try {
+      // 获取当前生效的上缴配置（优先使用班型专属配置，回落到全局配置）
+      const headquarterConfig = await getActiveHeadquarterConfig(connection, student.class_type_id);
+      const headquarterAmount = calculateHeadquarterAmount(amountNum, headquarterConfig);
+
+      const voucherNo = await generateVoucherNo(new Date(payment_date), connection);
+      const [voucherResult] = await connection.query<ResultSetHeader>(
+        `INSERT INTO finance_vouchers (voucher_no, voucher_date, description, creator_id, creator_name, source_type, source_id) 
+         VALUES (?, ?, ?, 0, ?, 'student_payment', ?)`,
+        [voucherNo, payment_date, `${student.name}缴费`, operator, result.insertId]
+      );
+      const voucherId = voucherResult.insertId;
+
+      // 借：银行存款 (1001) - 收到的全部金额
+      await connection.query(
+        `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+         VALUES (?, '借', '1001', ?, '收到学员学费', 0)`,
+        [voucherId, amountNum]
+      );
+      // 贷：学员学费 (101) - 确认收入
+      await connection.query(
+        `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+         VALUES (?, '贷', '101', ?, '学员缴费收入', 1)`,
+        [voucherId, amountNum]
+      );
+
+      // 如果有上缴配置且上缴金额大于0，记录应付总校
+      if (headquarterAmount > 0) {
+        // 借：上缴总校费用 (201) - 确认支出
+        await connection.query(
+          `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+           VALUES (?, '借', '201', ?, '应上缴总校费用', 2)`,
+          [voucherId, headquarterAmount]
+        );
+        // 贷：应付总校 (2001) - 确认负债
+        await connection.query(
+          `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+           VALUES (?, '贷', '2001', ?, '应付总校款项', 3)`,
+          [voucherId, headquarterAmount]
+        );
+      }
+    } catch (financeError) {
+      // 财务凭证创建失败不影响缴费主流程，仅记录日志
+      console.error('自动创建财务凭证失败:', financeError);
+    }
 
     await connection.commit();
 

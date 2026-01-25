@@ -24,18 +24,8 @@ export default function Permissions() {
       const response = await permissionService.getPermissionTree();
       setPermissions(response.data || []);
       
-      // 默认展开所有节点
-      const allIds = new Set<number | string>();
-      const collectIds = (list: Permission[]) => {
-        list.forEach(item => {
-          allIds.add(item.id);
-          if (item.children) {
-            collectIds(item.children);
-          }
-        });
-      };
-      collectIds(response.data || []);
-      setExpandedKeys(allIds);
+      // 默认折叠所有节点（空Set表示全部折叠）
+      setExpandedKeys(new Set());
     } catch (error) {
       console.error('获取权限树失败:', error);
     } finally {

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
+import { ResultSetHeader, RowDataPacket, PoolConnection } from 'mysql2/promise';
+import { generateVoucherNo } from './finance';
 
 const router = Router();
 
@@ -227,7 +228,11 @@ router.post('/generate', async (req: Request, res: Response) => {
 
 // 更新工资记录
 router.put('/:id', async (req: Request, res: Response) => {
+  const connection = await pool.getConnection();
+  
   try {
+    await connection.beginTransaction();
+    
     const { id } = req.params;
     const {
       attendance_days,
@@ -240,12 +245,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     } = req.body;
 
     // 获取当前记录
-    const [current] = await pool.query<RowDataPacket[]>(
+    const [current] = await connection.query<RowDataPacket[]>(
       'SELECT * FROM coach_monthly_salary WHERE id = ?',
       [id]
     );
 
     if (current.length === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         message: '工资记录不存在'
@@ -253,6 +259,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const record = current[0];
+    const previousStatus = record.status;
 
     // 计算月份范围
     const monthStart = `${record.salary_month}-01`;
@@ -261,7 +268,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const monthEndStr = monthEnd.toISOString().split('T')[0];
 
     // 重新统计科目二通过数
-    const [subject2Result] = await pool.query<RowDataPacket[]>(`
+    const [subject2Result] = await connection.query<RowDataPacket[]>(`
       SELECT COUNT(*) as pass_count 
       FROM exam_registrations er
       JOIN exam_schedules es ON er.exam_schedule_id = es.id
@@ -275,7 +282,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const subject2PassCount = subject2Result[0]?.pass_count || 0;
 
     // 重新统计科目三通过数
-    const [subject3Result] = await pool.query<RowDataPacket[]>(`
+    const [subject3Result] = await connection.query<RowDataPacket[]>(`
       SELECT COUNT(*) as pass_count 
       FROM exam_registrations er
       JOIN exam_schedules es ON er.exam_schedule_id = es.id
@@ -289,7 +296,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const subject3PassCount = subject3Result[0]?.pass_count || 0;
 
     // 重新统计新招学员数
-    const [newStudentResult] = await pool.query<RowDataPacket[]>(`
+    const [newStudentResult] = await connection.query<RowDataPacket[]>(`
       SELECT COUNT(*) as student_count 
       FROM students
       WHERE coach_name = ?
@@ -306,7 +313,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         AND (expiry_date IS NULL OR expiry_date >= ?)
       ORDER BY effective_date DESC
     `;
-    const [configRows] = await pool.query<RowDataPacket[]>(configQuery, [targetDate, targetDate]);
+    const [configRows] = await connection.query<RowDataPacket[]>(configQuery, [targetDate, targetDate]);
 
     const configMap = new Map();
     configRows.forEach((row: any) => {
@@ -331,6 +338,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     const recruitmentComm = Number(newStudentCount) * recruitmentCommission;
     const grossSalary = baseSalary + subject2Comm + subject3Comm + recruitmentComm + newBonus - newDeduction;
 
+    const newStatus = status || record.status;
+    const finalNetSalary = net_salary !== undefined ? net_salary : (newStatus === 'paid' ? grossSalary : record.net_salary);
+
     const updateQuery = `
       UPDATE coach_monthly_salary 
       SET attendance_days = ?, 
@@ -351,7 +361,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       WHERE id = ?
     `;
 
-    await pool.query(updateQuery, [
+    await connection.query(updateQuery, [
       newAttendanceDays,
       baseSalary,
       subject2PassCount,
@@ -364,22 +374,58 @@ router.put('/:id', async (req: Request, res: Response) => {
       newDeduction,
       deduction_reason || record.deduction_reason,
       grossSalary,
-      net_salary !== undefined ? net_salary : record.net_salary,
-      status || record.status,
+      finalNetSalary,
+      newStatus,
       remarks !== undefined ? remarks : record.remarks,
       id
     ]);
+
+    // 如果状态从非 paid 变为 paid，自动生成财务凭证
+    if (newStatus === 'paid' && previousStatus !== 'paid' && finalNetSalary > 0) {
+      try {
+        const paymentDate = new Date();
+        const voucherNo = await generateVoucherNo(paymentDate, connection as PoolConnection);
+        
+        const [voucherResult] = await connection.query<ResultSetHeader>(
+          `INSERT INTO finance_vouchers (voucher_no, voucher_date, description, creator_id, creator_name, source_type, source_id) 
+           VALUES (?, ?, ?, 0, ?, 'coach_salary', ?)`,
+          [voucherNo, paymentDate, `${record.coach_name} ${record.salary_month} 工资发放`, '系统', id]
+        );
+        const voucherId = voucherResult.insertId;
+
+        // 借：教练工资 (209) - 确认支出
+        await connection.query(
+          `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+           VALUES (?, '借', '209', ?, '教练工资支出', 0)`,
+          [voucherId, finalNetSalary]
+        );
+        // 贷：银行存款 (1001) - 资金流出
+        await connection.query(
+          `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
+           VALUES (?, '贷', '1001', ?, '发放教练工资', 1)`,
+          [voucherId, finalNetSalary]
+        );
+      } catch (financeError) {
+        // 财务凭证创建失败不影响工资发放主流程，仅记录日志
+        console.error('自动创建教练工资财务凭证失败:', financeError);
+      }
+    }
+
+    await connection.commit();
 
     res.json({
       success: true,
       message: '工资记录更新成功'
     });
   } catch (error) {
+    await connection.rollback();
     console.error('更新工资记录失败:', error);
     res.status(500).json({ 
       success: false, 
       message: '服务器错误: ' + (error as Error).message 
     });
+  } finally {
+    connection.release();
   }
 });
 

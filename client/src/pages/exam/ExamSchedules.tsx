@@ -5,6 +5,7 @@ import Table from '../../components/common/Table';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { ColumnDef } from '@tanstack/react-table';
+import { subscribe, EVENTS } from '../../utils/events';
 import '../system/Students.css';
 
 const EXAM_TYPES: ExamType[] = ['科目一', '科目二', '科目三', '科目四'];
@@ -27,7 +28,6 @@ export default function ExamSchedules() {
     exam_date: '',
     exam_type: '科目一',
     venue_id: 0,
-    capacity: 30,
     person_in_charge: '',
     notes: ''
   });
@@ -35,6 +35,15 @@ export default function ExamSchedules() {
   useEffect(() => {
     fetchSchedules();
     fetchVenues();
+    
+    // 监听考试报名变更事件，自动刷新已报考人数
+    const unsubscribe = subscribe(EVENTS.EXAM_REGISTRATION_CHANGED, () => {
+      fetchSchedules();
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const fetchSchedules = async () => {
@@ -74,7 +83,6 @@ export default function ExamSchedules() {
       exam_date: '',
       exam_type: '科目一',
       venue_id: venues.length > 0 ? venues[0].id : 0,
-      capacity: 30,
       person_in_charge: '',
       notes: ''
     });
@@ -87,7 +95,6 @@ export default function ExamSchedules() {
       exam_date: schedule.exam_date.split('T')[0],
       exam_type: schedule.exam_type,
       venue_id: schedule.venue_id,
-      capacity: schedule.capacity,
       person_in_charge: schedule.person_in_charge || '',
       notes: schedule.notes || ''
     });
@@ -103,11 +110,6 @@ export default function ExamSchedules() {
 
       if (!formData.venue_id || formData.venue_id === 0) {
         alert('请选择考试场地');
-        return;
-      }
-
-      if (!formData.capacity || formData.capacity <= 0) {
-        alert('请输入有效的可容纳人数');
         return;
       }
 
@@ -180,14 +182,10 @@ export default function ExamSchedules() {
       cell: ({ row }) => row.original.venue_name || '-',
     },
     {
-      accessorKey: 'capacity',
-      header: '容纳人数',
+      accessorKey: 'registered_count',
+      header: '已报考人数',
       size: 100,
-      cell: ({ row }) => (
-        <span>
-          {row.original.arranged_count} / {row.original.capacity}
-        </span>
-      ),
+      cell: ({ row }) => row.original.registered_count ?? 0,
     },
     {
       accessorKey: 'person_in_charge',
@@ -329,19 +327,6 @@ export default function ExamSchedules() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="form-group">
-            <label>
-              可容纳人数 <span className="required">*</span>
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={formData.capacity}
-              onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || 0 })}
-              placeholder="请输入可容纳人数"
-            />
           </div>
 
           <div className="form-group">
