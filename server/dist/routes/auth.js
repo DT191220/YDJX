@@ -9,8 +9,11 @@ const crypto_js_1 = __importDefault(require("crypto-js"));
 const database_1 = __importDefault(require("../config/database"));
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
-// 加密密钥（与前端保持一致）
-const ENCRYPT_KEY = 'YuanDongDrivingSchool2024!@#';
+// 加密密钥从环境变量读取（与前端保持一致）
+const ENCRYPT_KEY = process.env.ENCRYPT_KEY || 'YuanDongDrivingSchool2024!@#';
+if (!process.env.ENCRYPT_KEY && process.env.NODE_ENV === 'production') {
+    console.warn('[安全警告] ENCRYPT_KEY 环境变量未设置，使用默认值');
+}
 // 解密密码
 function decryptPassword(encryptedData) {
     try {
@@ -90,11 +93,12 @@ router.post('/login', async (req, res) => {
             });
         }
         // 查询用户角色
-        const [roles] = await database_1.default.query(`SELECT r.role_code FROM sys_roles r
+        const [roles] = await database_1.default.query(`SELECT r.role_code, r.role_name FROM sys_roles r
        INNER JOIN sys_user_roles ur ON r.id = ur.role_id
        WHERE ur.user_id = ? LIMIT 1`, [user.id]);
         const roleList = roles;
         const roleCode = roleList.length > 0 ? roleList[0].role_code : 'USER';
+        const roleName = roleList.length > 0 ? roleList[0].role_name : '普通用户';
         // 查询用户权限（通过角色关联）
         const [permissions] = await database_1.default.query(`SELECT DISTINCT p.permission_code 
        FROM sys_permissions p
@@ -119,7 +123,8 @@ router.post('/login', async (req, res) => {
                     id: user.id,
                     username: user.username,
                     realName: user.real_name,
-                    role: roleCode
+                    role: roleCode,
+                    roleName: roleName
                 },
                 permissions: permissionCodes
             }

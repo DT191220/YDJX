@@ -50,28 +50,28 @@ router.get('/', async (req, res) => {
         // 移除过滤规则，显示所有报名状态的学员
         // whereClause += ` AND enrollment_status NOT IN ('咨询中', '预约报名')`;
         if (keyword) {
-            whereClause += ' AND (name LIKE ? OR id_card LIKE ? OR phone LIKE ?)';
+            whereClause += ' AND (s.name LIKE ? OR s.id_card LIKE ? OR s.phone LIKE ?)';
             const keywordPattern = `%${keyword}%`;
             params.push(keywordPattern, keywordPattern, keywordPattern);
         }
         if (status) {
-            whereClause += ' AND enrollment_status = ?';
+            whereClause += ' AND s.enrollment_status = ?';
             params.push(status);
         }
         if (enrollment_date_start) {
-            whereClause += ' AND enrollment_date >= ?';
+            whereClause += ' AND s.enrollment_date >= ?';
             params.push(enrollment_date_start);
         }
         if (enrollment_date_end) {
-            whereClause += ' AND enrollment_date <= ?';
+            whereClause += ' AND s.enrollment_date <= ?';
             params.push(enrollment_date_end);
         }
         if (coach_name) {
-            whereClause += ' AND coach_name LIKE ?';
+            whereClause += ' AND s.coach_name LIKE ?';
             params.push(`%${coach_name}%`);
         }
         // 获取总数
-        const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM students ${whereClause}`, params);
+        const [countResult] = await database_1.default.query(`SELECT COUNT(*) as total FROM students s ${whereClause}`, params);
         const total = countResult[0].total;
         // 获取学员列表 - 使用白名单验证排序参数
         const validColumns = ['id', 'name', 'phone', 'gender', 'birth_date', 'age', 'enrollment_status', 'enrollment_date', 'coach_name', 'class_type_id', 'license_type', 'created_at', 'updated_at'];
@@ -89,6 +89,7 @@ router.get('/', async (req, res) => {
               s.class_type_id, ct.name as class_type_name, s.license_type,
               s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.account_balance, s.payment_status,
               (s.contract_amount - s.discount_amount) as payable_amount,
+              s.submit_status, s.submit_amount, DATE_FORMAT(s.submit_date, '%Y-%m-%d') as submit_date, s.submit_operator,
               s.registrar_id, s.registrar_name, s.created_at, s.updated_at
        FROM students s
        LEFT JOIN class_types ct ON s.class_type_id = ct.id
@@ -132,6 +133,7 @@ router.get('/:id', async (req, res) => {
               s.class_type_id, ct.name as class_type_name, s.license_type,
               s.contract_amount, s.actual_amount, s.discount_amount, s.debt_amount, s.account_balance, s.payment_status,
               (s.contract_amount - s.discount_amount) as payable_amount,
+              s.submit_status, s.submit_amount, DATE_FORMAT(s.submit_date, '%Y-%m-%d') as submit_date, s.submit_operator,
               s.registrar_id, s.registrar_name, s.created_at, s.updated_at
        FROM students s
        LEFT JOIN class_types ct ON s.class_type_id = ct.id
@@ -439,19 +441,23 @@ router.delete('/:id', async (req, res) => {
 // 获取招生统计数据
 router.get('/statistics/enrollment', async (req, res) => {
     try {
-        const { year } = req.query;
+        const { year, month } = req.query;
         const targetYear = year ? parseInt(year) : new Date().getFullYear();
-        // 月度招生统计（按报名日期统计，排除咨询中和预约报名状态）
-        const [monthlyData] = await database_1.default.query(`
-      SELECT 
-        DATE_FORMAT(enrollment_date, '%Y-%m') as month,
-        COUNT(*) as count
+        const targetMonth = month ? parseInt(month) : 0; // 0表示全年
+        // 构建日期筛选条件
+        let dateCondition = 'YEAR(enrollment_date) = ?';
+        let dateParams = [targetYear];
+        if (targetMonth > 0) {
+            dateCondition = 'YEAR(enrollment_date) = ? AND MONTH(enrollment_date) = ?';
+            dateParams = [targetYear, targetMonth];
+        }
+        // 当前筛选条件下的总计
+        const [currentTotal] = await database_1.default.query(`
+      SELECT COUNT(*) as total
       FROM students
-      WHERE YEAR(enrollment_date) = ?
+      WHERE ${dateCondition}
         AND enrollment_status NOT IN ('咨询中', '预约报名')
-      GROUP BY DATE_FORMAT(enrollment_date, '%Y-%m')
-      ORDER BY month
-    `, [targetYear]);
+    `, dateParams);
         // 按班型统计
         const [byClassType] = await database_1.default.query(`
       SELECT 
@@ -459,57 +465,102 @@ router.get('/statistics/enrollment', async (req, res) => {
         COUNT(*) as count
       FROM students s
       LEFT JOIN class_types ct ON s.class_type_id = ct.id
-      WHERE YEAR(s.enrollment_date) = ?
+      WHERE ${dateCondition.replace(/enrollment_date/g, 's.enrollment_date')}
         AND s.enrollment_status NOT IN ('咨询中', '预约报名')
       GROUP BY s.class_type_id, ct.name
       ORDER BY count DESC
-    `, [targetYear]);
+    `, dateParams);
         // 按教练统计
         const [byCoach] = await database_1.default.query(`
       SELECT 
         coach_name,
         COUNT(*) as count
       FROM students
-      WHERE YEAR(enrollment_date) = ?
+      WHERE ${dateCondition}
         AND enrollment_status NOT IN ('咨询中', '预约报名')
         AND coach_name IS NOT NULL AND coach_name != ''
       GROUP BY coach_name
       ORDER BY count DESC
-    `, [targetYear]);
-        // 年度总计
+    `, dateParams);
+        // 教练-班型交叉统计（新增）
+        const [coachClassType] = await database_1.default.query(`
+      SELECT 
+        s.coach_name,
+        ct.name as class_type_name,
+        COUNT(*) as count
+      FROM students s
+      LEFT JOIN class_types ct ON s.class_type_id = ct.id
+      WHERE ${dateCondition.replace(/enrollment_date/g, 's.enrollment_date')}
+        AND s.enrollment_status NOT IN ('咨询中', '预约报名')
+        AND s.coach_name IS NOT NULL AND s.coach_name != ''
+      GROUP BY s.coach_name, s.class_type_id, ct.name
+      ORDER BY s.coach_name, count DESC
+    `, dateParams);
+        // 月度招生统计（仅当查询全年时返回）
+        let monthlyStats = [];
+        if (targetMonth === 0) {
+            const [monthlyData] = await database_1.default.query(`
+        SELECT 
+          DATE_FORMAT(enrollment_date, '%Y-%m') as month,
+          COUNT(*) as count
+        FROM students
+        WHERE YEAR(enrollment_date) = ?
+          AND enrollment_status NOT IN ('咨询中', '预约报名')
+        GROUP BY DATE_FORMAT(enrollment_date, '%Y-%m')
+        ORDER BY month
+      `, [targetYear]);
+            // 构建完整的12个月数据
+            for (let m = 1; m <= 12; m++) {
+                const monthStr = `${targetYear}-${String(m).padStart(2, '0')}`;
+                const found = monthlyData.find(item => item.month === monthStr);
+                monthlyStats.push({
+                    month: monthStr,
+                    monthName: `${m}月`,
+                    count: found ? found.count : 0
+                });
+            }
+        }
+        // 年度总计（用于同比）
         const [yearTotal] = await database_1.default.query(`
       SELECT COUNT(*) as total
       FROM students
       WHERE YEAR(enrollment_date) = ?
         AND enrollment_status NOT IN ('咨询中', '预约报名')
     `, [targetYear]);
-        // 获取上一年同期数据用于同比计算
-        const [lastYearTotal] = await database_1.default.query(`
-      SELECT COUNT(*) as total
-      FROM students
-      WHERE YEAR(enrollment_date) = ?
-        AND enrollment_status NOT IN ('咨询中', '预约报名')
-    `, [targetYear - 1]);
-        // 构建完整的12个月数据
-        const monthlyStats = [];
-        for (let m = 1; m <= 12; m++) {
-            const monthStr = `${targetYear}-${String(m).padStart(2, '0')}`;
-            const found = monthlyData.find(item => item.month === monthStr);
-            monthlyStats.push({
-                month: monthStr,
-                monthName: `${m}月`,
-                count: found ? found.count : 0
-            });
+        // 上年同期数据
+        let lastPeriodTotal = 0;
+        if (targetMonth > 0) {
+            // 去年同月
+            const [lastMonthTotal] = await database_1.default.query(`
+        SELECT COUNT(*) as total
+        FROM students
+        WHERE YEAR(enrollment_date) = ? AND MONTH(enrollment_date) = ?
+          AND enrollment_status NOT IN ('咨询中', '预约报名')
+      `, [targetYear - 1, targetMonth]);
+            lastPeriodTotal = lastMonthTotal[0]?.total || 0;
+        }
+        else {
+            // 去年全年
+            const [lastYearTotal] = await database_1.default.query(`
+        SELECT COUNT(*) as total
+        FROM students
+        WHERE YEAR(enrollment_date) = ?
+          AND enrollment_status NOT IN ('咨询中', '预约报名')
+      `, [targetYear - 1]);
+            lastPeriodTotal = lastYearTotal[0]?.total || 0;
         }
         res.json({
             success: true,
             data: {
                 year: targetYear,
+                month: targetMonth,
+                currentTotal: currentTotal[0]?.total || 0,
                 yearTotal: yearTotal[0]?.total || 0,
-                lastYearTotal: lastYearTotal[0]?.total || 0,
+                lastPeriodTotal,
                 monthlyStats,
                 byClassType,
-                byCoach
+                byCoach,
+                coachClassType
             }
         });
     }

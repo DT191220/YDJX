@@ -1,7 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jiaxiaotong_secret_key_2024';
+// JWT密钥必须从环境变量读取，生产环境不允许使用默认值
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[安全警告] JWT_SECRET 环境变量未设置！');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('生产环境必须设置 JWT_SECRET 环境变量');
+  }
+}
+const SECRET_KEY = JWT_SECRET || 'dev_only_secret_key_not_for_production';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -19,7 +27,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
       return res.status(401).json({ message: '未提供认证令牌' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, SECRET_KEY) as any;
     req.user = decoded;
     next();
   } catch (error) {
@@ -28,5 +36,5 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
 };
 
 export const generateToken = (user: { id: number; username: string; role: string }) => {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: '24h' });
+  return jwt.sign(user, SECRET_KEY, { expiresIn: '24h' });
 };

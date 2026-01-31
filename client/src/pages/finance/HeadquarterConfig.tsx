@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { financeService, HeadquarterConfig, HeadquarterConfigFormData } from '../../services/finance';
 import Table from '../../components/common/Table';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import Pagination from '../../components/common/Pagination';
 import { ColumnDef } from '@tanstack/react-table';
 import '../system/Students.css';
 
@@ -27,6 +28,10 @@ export default function HeadquarterConfigPage() {
   const [loading, setLoading] = useState(false);
   const [activeConfig, setActiveConfig] = useState<HeadquarterConfig | null>(null);
   
+  // 分页状态
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  
   const [showModal, setShowModal] = useState(false);
   const [editingConfig, setEditingConfig] = useState<HeadquarterConfig | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -48,6 +53,16 @@ export default function HeadquarterConfigPage() {
     fetchActiveConfig();
     fetchClassTypes();
   }, []);
+
+  // 计算分页数据
+  const { paginatedConfigs, total, pages } = useMemo(() => {
+    const total = configs.length;
+    const pages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedConfigs = configs.slice(start, end);
+    return { paginatedConfigs, total, pages };
+  }, [configs, page, limit]);
 
   const fetchConfigs = async () => {
     setLoading(true);
@@ -321,7 +336,20 @@ export default function HeadquarterConfigPage() {
       </div>
 
       <div className="table-container">
-        <Table columns={columns} data={configs} loading={loading} />
+        <Table columns={columns} data={paginatedConfigs} loading={loading} />
+        {total > 0 && (
+          <Pagination
+            page={page}
+            pages={pages}
+            total={total}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+          />
+        )}
       </div>
 
       {/* 配置编辑Modal */}
@@ -444,14 +472,13 @@ export default function HeadquarterConfigPage() {
             />
           </div>
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center' }}>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={formData.is_active}
                 onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                style={{ marginRight: '8px' }}
               />
-              启用
+              <span>启用</span>
             </label>
           </div>
           <div className="form-actions">

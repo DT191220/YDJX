@@ -1,5 +1,5 @@
 import { api } from './api';
-import { ClassType, ClassTypeFormData, PaymentRecord, PaymentRecordFormData, PaymentStatistics, StudentPaymentInfo, ServiceConfig, ServiceConfigFormData } from '../types/payment';
+import { ClassTypeFormData, PaymentRecordFormData, ServiceConfigFormData } from '../types/payment';
 
 // 班型管理相关API
 export const classTypeService = {
@@ -90,6 +90,30 @@ export const paymentService = {
   // 获取缴费统计信息
   getPaymentStatistics: async (studentId: number) => {
     const response = await api.get(`/payments/statistics/${studentId}`);
+    return response;
+  },
+
+  // 上缴确认
+  submitConfirm: async (data: { student_id: number; operator: string; remark?: string }) => {
+    const response = await api.post('/payments/submit-confirm', data);
+    return response;
+  },
+
+  // 撤销上缴
+  submitRevoke: async (data: { student_id: number; operator: string; remark?: string }) => {
+    const response = await api.post('/payments/submit-revoke', data);
+    return response;
+  },
+
+  // 获取上缴记录列表
+  getSubmitRecords: async (params: {
+    limit?: number;
+    offset?: number;
+    keyword?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const response = await api.get('/payments/submit-records', params);
     return response;
   }
 };

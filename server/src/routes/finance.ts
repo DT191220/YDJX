@@ -795,7 +795,7 @@ router.delete('/headquarter-config/:id', async (req: Request, res: Response) => 
 // 财务报表接口
 // ========================================
 
-// 月度利润表
+// 月度利润表（含分摊费用）
 router.get('/reports/profit-monthly', async (req: Request, res: Response) => {
   try {
     const { yearMonth } = req.query;
@@ -807,6 +807,12 @@ router.get('/reports/profit-monthly', async (req: Request, res: Response) => {
       });
     }
 
+    // 解析年月
+    const [yearStr, monthStr] = (yearMonth as string).split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr);
+
+    // 查询实际发生的收支
     const [rows] = await pool.query<RowDataPacket[]>(`
       SELECT 
         s.subject_type,
@@ -823,16 +829,27 @@ router.get('/reports/profit-monthly', async (req: Request, res: Response) => {
       ORDER BY s.subject_type, s.subject_code
     `, [yearMonth]);
 
+    // 查询当月适用的分摊费用
+    const [allocatedRows] = await pool.query<RowDataPacket[]>(`
+      SELECT ea.*, fs.subject_name
+      FROM finance_expense_allocation ea
+      LEFT JOIN finance_subjects fs ON ea.subject_code = fs.subject_code
+      WHERE ea.allocation_year = ?
+        AND ea.is_active = TRUE
+        AND ea.start_month <= ?
+        AND ea.end_month >= ?
+    `, [year, month, month]);
+
     // 计算汇总
     let totalIncome = 0;
     let totalExpense = 0;
+    let totalAllocated = 0;
 
     const incomeItems: any[] = [];
     const expenseItems: any[] = [];
+    const allocatedItems: any[] = [];
 
     rows.forEach((row: any) => {
-      // 收入科目：贷方增加，借方减少
-      // 支出科目：借方增加，贷方减少
       if (row.subject_type === '收入') {
         const amount = row.total_credit - row.total_debit;
         totalIncome += amount;
@@ -852,15 +869,31 @@ router.get('/reports/profit-monthly', async (req: Request, res: Response) => {
       }
     });
 
+    // 处理分摊费用
+    allocatedRows.forEach((row: any) => {
+      const monthlyAmount = parseFloat(row.monthly_amount) || 0;
+      totalAllocated += monthlyAmount;
+      allocatedItems.push({
+        id: row.id,
+        expense_name: row.expense_name,
+        subject_code: row.subject_code,
+        subject_name: row.subject_name,
+        total_amount: parseFloat(row.total_amount),
+        monthly_amount: monthlyAmount
+      });
+    });
+
     res.json({
       success: true,
       data: {
         yearMonth,
         incomeItems,
         expenseItems,
+        allocatedItems,
         totalIncome,
         totalExpense,
-        netProfit: totalIncome - totalExpense
+        totalAllocated,
+        netProfit: totalIncome - totalExpense - totalAllocated
       }
     });
   } catch (error: any) {
@@ -993,6 +1026,382 @@ router.get('/reports/subject-balance', async (req: Request, res: Response) => {
   }
 });
 
+// 年度利润汇总表
+router.get('/reports/profit-yearly', async (req: Request, res: Response) => {
+  try {
+    const { year } = req.query;
+
+    if (!year) {
+      return res.status(400).json({
+        success: false,
+        message: '请指定查询年度'
+      });
+    }
+
+    const yearNum = parseInt(year as string);
+    const monthlyData: any[] = [];
+    let yearlyTotalIncome = 0;
+    let yearlyTotalExpense = 0;
+    let yearlyTotalAllocated = 0;
+
+    // 查询该年度的分摊配置
+    const [allocationRows] = await pool.query<RowDataPacket[]>(`
+      SELECT * FROM finance_expense_allocation
+      WHERE allocation_year = ? AND is_active = TRUE
+    `, [yearNum]);
+
+    // 遍历12个月
+    for (let month = 1; month <= 12; month++) {
+      const yearMonth = `${yearNum}-${String(month).padStart(2, '0')}`;
+
+      // 查询该月实际发生的收支
+      const [rows] = await pool.query<RowDataPacket[]>(`
+        SELECT 
+          s.subject_type,
+          SUM(CASE WHEN i.entry_type = '借' THEN i.amount ELSE 0 END) as total_debit,
+          SUM(CASE WHEN i.entry_type = '贷' THEN i.amount ELSE 0 END) as total_credit
+        FROM finance_voucher_items i
+        JOIN finance_subjects s ON i.subject_code = s.subject_code
+        JOIN finance_vouchers v ON i.voucher_id = v.id
+        WHERE DATE_FORMAT(v.voucher_date, '%Y-%m') = ?
+          AND s.subject_type IN ('收入', '支出')
+        GROUP BY s.subject_type
+      `, [yearMonth]);
+
+      let monthIncome = 0;
+      let monthExpense = 0;
+
+      rows.forEach((row: any) => {
+        if (row.subject_type === '收入') {
+          monthIncome = row.total_credit - row.total_debit;
+        } else if (row.subject_type === '支出') {
+          monthExpense = row.total_debit - row.total_credit;
+        }
+      });
+
+      // 计算该月的分摊费用
+      let monthAllocated = 0;
+      allocationRows.forEach((allocation: any) => {
+        if (month >= allocation.start_month && month <= allocation.end_month) {
+          monthAllocated += parseFloat(allocation.monthly_amount) || 0;
+        }
+      });
+
+      const monthNetProfit = monthIncome - monthExpense - monthAllocated;
+
+      monthlyData.push({
+        month,
+        income: monthIncome,
+        expense: monthExpense,
+        allocated: monthAllocated,
+        netProfit: monthNetProfit
+      });
+
+      yearlyTotalIncome += monthIncome;
+      yearlyTotalExpense += monthExpense;
+      yearlyTotalAllocated += monthAllocated;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        year: yearNum,
+        monthlyData,
+        yearlyTotal: {
+          totalIncome: yearlyTotalIncome,
+          totalExpense: yearlyTotalExpense,
+          totalAllocated: yearlyTotalAllocated,
+          netProfit: yearlyTotalIncome - yearlyTotalExpense - yearlyTotalAllocated
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('获取年度利润汇总失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取年度利润汇总失败: ' + error.message
+    });
+  }
+});
+
+// ========================================
+// 费用分摊配置接口
+// ========================================
+
+// 获取费用分摊配置列表
+router.get('/expense-allocation', async (req: Request, res: Response) => {
+  try {
+    const { year, is_active } = req.query;
+
+    let sql = `
+      SELECT ea.*, fs.subject_name 
+      FROM finance_expense_allocation ea
+      LEFT JOIN finance_subjects fs ON ea.subject_code = fs.subject_code
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (year) {
+      sql += ` AND ea.allocation_year = ?`;
+      params.push(year);
+    }
+
+    if (is_active !== undefined) {
+      sql += ` AND ea.is_active = ?`;
+      params.push(is_active === 'true' ? 1 : 0);
+    }
+
+    sql += ` ORDER BY ea.allocation_year DESC, ea.subject_code ASC`;
+
+    const [rows] = await pool.query<RowDataPacket[]>(sql, params);
+
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error: any) {
+    console.error('获取费用分摊配置列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取费用分摊配置列表失败: ' + error.message
+    });
+  }
+});
+
+// 新增费用分摊配置
+router.post('/expense-allocation', async (req: Request, res: Response) => {
+  try {
+    const { 
+      expense_name, subject_code, total_amount, allocation_year, 
+      allocation_method, monthly_amount, start_month, end_month, 
+      remark, is_active, created_by 
+    } = req.body;
+
+    if (!expense_name || !subject_code || !total_amount || !allocation_year) {
+      return res.status(400).json({
+        success: false,
+        message: '费用名称、关联科目、年度总金额和分摊年度为必填项'
+      });
+    }
+
+    // 验证科目是否存在且为支出类
+    const [subjectRows] = await pool.query<RowDataPacket[]>(
+      `SELECT * FROM finance_subjects WHERE subject_code = ? AND subject_type = '支出'`,
+      [subject_code]
+    );
+
+    if (subjectRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '关联科目不存在或不是支出类科目'
+      });
+    }
+
+    // 计算每月分摊金额
+    const method = allocation_method || 'average';
+    const startM = start_month || 1;
+    const endM = end_month || 12;
+    const monthCount = endM - startM + 1;
+    
+    let calculatedMonthlyAmount = monthly_amount;
+    if (method === 'average') {
+      calculatedMonthlyAmount = Math.round(parseFloat(total_amount) / monthCount * 100) / 100;
+    }
+
+    const [result] = await pool.query<ResultSetHeader>(
+      `INSERT INTO finance_expense_allocation 
+       (expense_name, subject_code, total_amount, allocation_year, allocation_method, 
+        monthly_amount, start_month, end_month, remark, is_active, created_by) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        expense_name, subject_code, total_amount, allocation_year, method,
+        calculatedMonthlyAmount, startM, endM, remark || null, 
+        is_active !== false, created_by || null
+      ]
+    );
+
+    res.json({
+      success: true,
+      data: { id: result.insertId },
+      message: '费用分摊配置创建成功'
+    });
+  } catch (error: any) {
+    console.error('创建费用分摊配置失败:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: '该科目在该年度已存在分摊配置'
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: '创建费用分摊配置失败: ' + error.message
+    });
+  }
+});
+
+// 修改费用分摊配置
+router.put('/expense-allocation/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { 
+      expense_name, subject_code, total_amount, allocation_year,
+      allocation_method, monthly_amount, start_month, end_month, 
+      remark, is_active 
+    } = req.body;
+
+    // 计算每月分摊金额
+    const method = allocation_method || 'average';
+    const startM = start_month || 1;
+    const endM = end_month || 12;
+    const monthCount = endM - startM + 1;
+    
+    let calculatedMonthlyAmount = monthly_amount;
+    if (method === 'average' && total_amount) {
+      calculatedMonthlyAmount = Math.round(parseFloat(total_amount) / monthCount * 100) / 100;
+    }
+
+    const [result] = await pool.query<ResultSetHeader>(
+      `UPDATE finance_expense_allocation 
+       SET expense_name = ?, subject_code = ?, total_amount = ?, allocation_year = ?,
+           allocation_method = ?, monthly_amount = ?, start_month = ?, end_month = ?,
+           remark = ?, is_active = ?
+       WHERE id = ?`,
+      [
+        expense_name, subject_code, total_amount, allocation_year,
+        method, calculatedMonthlyAmount, startM, endM,
+        remark || null, is_active !== false, id
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '费用分摊配置不存在'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '费用分摊配置更新成功'
+    });
+  } catch (error: any) {
+    console.error('更新费用分摊配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '更新费用分摊配置失败: ' + error.message
+    });
+  }
+});
+
+// 删除费用分摊配置
+router.delete('/expense-allocation/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await pool.query<ResultSetHeader>(
+      'DELETE FROM finance_expense_allocation WHERE id = ?',
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '费用分摊配置不存在'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '费用分摊配置删除成功'
+    });
+  } catch (error: any) {
+    console.error('删除费用分摊配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除费用分摊配置失败: ' + error.message
+    });
+  }
+});
+
+// ========================================
+// 科目用途映射接口
+// ========================================
+
+// 获取科目映射列表
+router.get('/subject-mapping', async (req: Request, res: Response) => {
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(`
+      SELECT sm.*, fs.subject_name 
+      FROM finance_subject_mapping sm
+      LEFT JOIN finance_subjects fs ON sm.subject_code = fs.subject_code
+      ORDER BY sm.id ASC
+    `);
+
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error: any) {
+    console.error('获取科目映射列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取科目映射列表失败: ' + error.message
+    });
+  }
+});
+
+// 更新科目映射
+router.put('/subject-mapping/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { subject_code } = req.body;
+
+    if (!subject_code) {
+      return res.status(400).json({
+        success: false,
+        message: '科目代码为必填项'
+      });
+    }
+
+    // 验证科目是否存在
+    const [subjectRows] = await pool.query<RowDataPacket[]>(
+      'SELECT * FROM finance_subjects WHERE subject_code = ? AND is_active = TRUE',
+      [subject_code]
+    );
+
+    if (subjectRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '指定的科目不存在或已停用'
+      });
+    }
+
+    const [result] = await pool.query<ResultSetHeader>(
+      'UPDATE finance_subject_mapping SET subject_code = ? WHERE id = ?',
+      [subject_code, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '科目映射不存在'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '科目映射更新成功'
+    });
+  } catch (error: any) {
+    console.error('更新科目映射失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '更新科目映射失败: ' + error.message
+    });
+  }
+});
+
 // ========================================
 // 导出凭证号生成函数供其他模块使用
 // ========================================
@@ -1054,5 +1463,51 @@ function calculateHeadquarterAmount(totalAmount: number, config: any): number {
   return 0;
 }
 
-export { generateVoucherNo, validateBalance, getActiveHeadquarterConfig, calculateHeadquarterAmount };
+/**
+ * 获取科目映射（根据用途代码获取科目代码）
+ * @param usageCode 用途代码
+ * @param conn 数据库连接（可选，用于事务）
+ */
+async function getSubjectCode(usageCode: string, conn?: PoolConnection): Promise<string> {
+  const db = conn || pool;
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT subject_code FROM finance_subject_mapping WHERE usage_code = ? AND is_active = TRUE`,
+    [usageCode]
+  );
+  
+  if (rows.length === 0) {
+    throw new Error(`未找到科目映射配置: ${usageCode}`);
+  }
+  
+  return rows[0].subject_code;
+}
+
+/**
+ * 批量获取科目映射
+ * @param usageCodes 用途代码数组
+ * @param conn 数据库连接（可选，用于事务）
+ */
+async function getSubjectCodes(usageCodes: string[], conn?: PoolConnection): Promise<Record<string, string>> {
+  const db = conn || pool;
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT usage_code, subject_code FROM finance_subject_mapping WHERE usage_code IN (?) AND is_active = TRUE`,
+    [usageCodes]
+  );
+  
+  const mapping: Record<string, string> = {};
+  rows.forEach((row: any) => {
+    mapping[row.usage_code] = row.subject_code;
+  });
+  
+  // 检查是否所有用途代码都找到了
+  for (const code of usageCodes) {
+    if (!mapping[code]) {
+      throw new Error(`未找到科目映射配置: ${code}`);
+    }
+  }
+  
+  return mapping;
+}
+
+export { generateVoucherNo, validateBalance, getActiveHeadquarterConfig, calculateHeadquarterAmount, getSubjectCode, getSubjectCodes };
 export default router;

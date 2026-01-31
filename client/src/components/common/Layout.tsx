@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { menuService, Menu } from '../../services/menu';
@@ -14,6 +14,11 @@ export default function Layout({ children }: LayoutProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [menuGroups, setMenuGroups] = useState<Menu[]>([]);
   const [menuLoading, setMenuLoading] = useState(true);
+  
+  // 侧边栏折叠状态
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   // 从后端获取用户可访问的菜单
   useEffect(() => {
@@ -43,13 +48,19 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   const toggleGroup = (id: number) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
+    const newExpanded = new Set<number>();
+    // 手风琴效果：如果当前组未展开，则展开它并关闭其他组
+    if (!expandedGroups.has(id)) {
       newExpanded.add(id);
     }
+    // 如果当前组已展开，点击后关闭（newExpanded为空）
     setExpandedGroups(newExpanded);
+  };
+
+  // 切换侧边栏折叠状态
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+    setSidebarHovered(false);
   };
 
   return (
@@ -86,7 +97,28 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       <div className="layout-container">
-        <aside className="layout-sidebar">
+        {/* 悬停触发区域 - 仅在折叠时显示 */}
+        {sidebarCollapsed && (
+          <div 
+            className="sidebar-hover-trigger"
+            onMouseEnter={() => setSidebarHovered(true)}
+          />
+        )}
+        
+        <aside 
+          ref={sidebarRef}
+          className={`layout-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${sidebarHovered ? 'hovered' : ''}`}
+          onMouseLeave={() => sidebarCollapsed && setSidebarHovered(false)}
+        >
+          {/* 折叠按钮 */}
+          <button 
+            className="sidebar-toggle-btn"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? '展开菜单' : '折叠菜单'}
+          >
+            {sidebarCollapsed ? '»' : '«'}
+          </button>
+          
           <nav className="sidebar-nav">
             <Link to="/" className="nav-item">
               首页

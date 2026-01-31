@@ -1,0 +1,97 @@
+# Docker Compose 配置文件
+# 使用方法: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: jiaxiaotong-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-jiaxiao123}
+      MYSQL_DATABASE: ${DB_NAME:-yuandong_driving_school}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - jiaxiaotong-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端服务
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: jiaxiaotong-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-jiaxiao123}
+      DB_NAME: ${DB_NAME:-yuandong_driving_school}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPT_KEY: ${ENCRYPT_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - jiaxiaotong-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端服务
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: jiaxiaotong-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - jiaxiaotong-network
+
+  # 带SSL的Nginx反向代理 (生产环境可选)
+  nginx-ssl:
+    image: nginx:alpine
+    container_name: jiaxiaotong-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "8080:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - ./client/dist:/var/www/jiaxiaotong/client:ro
+    depends_on:
+      - server
+    networks:
+      - jiaxiaotong-network
+    profiles:
+      - ssl  # 使用 docker-compose --profile ssl up 启用
+
+networks:
+  jiaxiaotong-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local

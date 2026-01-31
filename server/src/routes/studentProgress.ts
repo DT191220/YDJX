@@ -156,6 +156,21 @@ router.put('/:id', async (req: Request, res: Response) => {
       subject4_pass_date
     } = req.body;
 
+    // 先获取当前状态，用于判断状态变化
+    const [currentProgress] = await pool.query<RowDataPacket[]>(
+      `SELECT * FROM student_exam_progress WHERE id = ?`,
+      [id]
+    );
+
+    if (currentProgress.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '进度记录不存在'
+      });
+    }
+
+    const current = currentProgress[0];
+
     // 计算总进度百分比
     let totalProgress = 0;
     if (subject1_status === '已通过') totalProgress += 25;
@@ -163,27 +178,95 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (subject3_status === '已通过') totalProgress += 25;
     if (subject4_status === '已通过') totalProgress += 25;
 
+    // 计算考试次数和连挂次数的变化
+    // 辅助函数：计算单科目的统计变化
+    const calcSubjectStats = (
+      oldStatus: string,
+      newStatus: string,
+      oldTotalCount: number,
+      oldFailedCount: number
+    ) => {
+      let totalCount = oldTotalCount;
+      let failedCount = oldFailedCount;
+
+      // 状态发生变化且新状态不是"未考"，表示参加了一次新考试
+      if (oldStatus !== newStatus && newStatus !== '未考') {
+        totalCount += 1;
+        
+        if (newStatus === '已通过') {
+          // 通过考试，连挂次数清零
+          failedCount = 0;
+        } else if (newStatus === '未通过') {
+          // 未通过考试，连挂次数+1
+          failedCount += 1;
+        }
+      }
+      // 如果新状态是"未考"（回退操作），保持原有统计不变
+
+      return { totalCount, failedCount };
+    };
+
+    const subject1Stats = calcSubjectStats(
+      current.subject1_status, subject1_status,
+      current.subject1_total_count || 0, current.subject1_failed_count || 0
+    );
+    const subject2Stats = calcSubjectStats(
+      current.subject2_status, subject2_status,
+      current.subject2_total_count || 0, current.subject2_failed_count || 0
+    );
+    const subject3Stats = calcSubjectStats(
+      current.subject3_status, subject3_status,
+      current.subject3_total_count || 0, current.subject3_failed_count || 0
+    );
+    const subject4Stats = calcSubjectStats(
+      current.subject4_status, subject4_status,
+      current.subject4_total_count || 0, current.subject4_failed_count || 0
+    );
+
     await pool.query(
       `UPDATE student_exam_progress 
        SET subject1_status = ?, subject1_pass_date = ?,
+           subject1_total_count = ?, subject1_failed_count = ?,
            subject2_status = ?, subject2_pass_date = ?,
+           subject2_total_count = ?, subject2_failed_count = ?,
            subject3_status = ?, subject3_pass_date = ?,
+           subject3_total_count = ?, subject3_failed_count = ?,
            subject4_status = ?, subject4_pass_date = ?,
+           subject4_total_count = ?, subject4_failed_count = ?,
            total_progress = ?
        WHERE id = ?`,
       [
         subject1_status, subject1_pass_date || null,
+        subject1Stats.totalCount, subject1Stats.failedCount,
         subject2_status, subject2_pass_date || null,
+        subject2Stats.totalCount, subject2Stats.failedCount,
         subject3_status, subject3_pass_date || null,
+        subject3Stats.totalCount, subject3Stats.failedCount,
         subject4_status, subject4_pass_date || null,
+        subject4Stats.totalCount, subject4Stats.failedCount,
         totalProgress,
         id
       ]
     );
 
+    // 返回更新后的完整数据
+    const [updatedProgress] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+         sep.*,
+         s.name as student_name,
+         s.phone as student_phone,
+         s.id_card as student_id_card,
+         s.enrollment_date
+       FROM student_exam_progress sep
+       INNER JOIN students s ON sep.student_id = s.id
+       WHERE sep.id = ?`,
+      [id]
+    );
+
     res.json({
       success: true,
-      message: '更新考试进度成功'
+      message: '更新考试进度成功',
+      data: updatedProgress[0]
     });
   } catch (error: any) {
     console.error('更新考试进度失败:', error);

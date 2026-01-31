@@ -151,11 +151,12 @@ export default function Users() {
       <Table data={users} columns={columns} loading={loading} />
 
       <Pagination
-        current={pagination.page}
+        page={pagination.page}
+        pages={Math.ceil(pagination.total / pagination.limit)}
         total={pagination.total}
-        pageSize={pagination.limit}
-        onChange={pagination.setPage}
-        onPageSizeChange={pagination.setLimit}
+        limit={pagination.limit}
+        onPageChange={pagination.setPage}
+        onLimitChange={pagination.setLimit}
       />
 
       {modalVisible && (

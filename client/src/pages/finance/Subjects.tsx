@@ -1,18 +1,28 @@
-import { useState, useEffect } from 'react';
-import { financeService, Subject, SubjectFormData } from '../../services/finance';
+import { useState, useEffect, useMemo } from 'react';
+import { financeService, Subject, SubjectFormData, SubjectMapping } from '../../services/finance';
 import Table from '../../components/common/Table';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import Pagination from '../../components/common/Pagination';
 import { ColumnDef } from '@tanstack/react-table';
 import '../system/Students.css';
 
 const SUBJECT_TYPES = ['资产', '负债', '权益', '收入', '支出'] as const;
 const BALANCE_DIRECTIONS = ['借', '贷'] as const;
 
+type TabType = 'subjects' | 'mapping';
+
 export default function Subjects() {
+  const [activeTab, setActiveTab] = useState<TabType>('subjects');
+  
+  // === 科目管理状态 ===
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState('');
+  
+  // 科目列表分页状态
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   
   const [showModal, setShowModal] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
@@ -28,9 +38,37 @@ export default function Subjects() {
     sort_order: 0
   });
 
+  // === 用途映射状态 ===
+  const [mappings, setMappings] = useState<SubjectMapping[]>([]);
+  const [mappingLoading, setMappingLoading] = useState(false);
+  const [editingMapping, setEditingMapping] = useState<SubjectMapping | null>(null);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [mappingFormSubjectCode, setMappingFormSubjectCode] = useState('');
+  const [activeSubjects, setActiveSubjects] = useState<Subject[]>([]);
+
   useEffect(() => {
-    fetchSubjects();
-  }, [typeFilter]);
+    if (activeTab === 'subjects') {
+      fetchSubjects();
+    } else {
+      fetchMappings();
+      fetchActiveSubjects();
+    }
+  }, [activeTab, typeFilter]);
+
+  // 筛选条件或tab变化时重置到第一页
+  useEffect(() => {
+    setPage(1);
+  }, [typeFilter, activeTab]);
+
+  // 计算科目列表分页数据
+  const { paginatedSubjects, total, pages } = useMemo(() => {
+    const total = subjects.length;
+    const pages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedSubjects = subjects.slice(start, end);
+    return { paginatedSubjects, total, pages };
+  }, [subjects, page, limit]);
 
   const fetchSubjects = async () => {
     setLoading(true);
@@ -114,6 +152,57 @@ export default function Subjects() {
     }
   };
 
+  // === 用途映射相关函数 ===
+  const fetchMappings = async () => {
+    setMappingLoading(true);
+    try {
+      const response = await financeService.getSubjectMappings();
+      if (response.data) {
+        setMappings(response.data);
+      }
+    } catch (error) {
+      console.error('获取科目映射列表失败:', error);
+    } finally {
+      setMappingLoading(false);
+    }
+  };
+
+  const fetchActiveSubjects = async () => {
+    try {
+      const response = await financeService.getSubjects({ is_active: 'true' });
+      if (response.data) {
+        setActiveSubjects(response.data);
+      }
+    } catch (error) {
+      console.error('获取启用科目列表失败:', error);
+    }
+  };
+
+  const handleEditMapping = (mapping: SubjectMapping) => {
+    setEditingMapping(mapping);
+    setMappingFormSubjectCode(mapping.subject_code);
+    setShowMappingModal(true);
+  };
+
+  const handleMappingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMapping || !mappingFormSubjectCode) {
+      alert('请选择科目');
+      return;
+    }
+
+    try {
+      await financeService.updateSubjectMapping(editingMapping.id, { subject_code: mappingFormSubjectCode });
+      alert('科目映射更新成功');
+      setShowMappingModal(false);
+      setEditingMapping(null);
+      fetchMappings();
+    } catch (error: any) {
+      console.error('更新科目映射失败:', error);
+      alert(error.message || '更新科目映射失败');
+    }
+  };
+
   const getTypeBadge = (type: string) => {
     const badges: Record<string, string> = {
       '资产': 'badge-blue',
@@ -193,40 +282,134 @@ export default function Subjects() {
     },
   ];
 
+  // 映射表列定义
+  const mappingColumns: ColumnDef<SubjectMapping, any>[] = [
+    {
+      accessorKey: 'usage_code',
+      header: '用途代码',
+      size: 150,
+    },
+    {
+      accessorKey: 'usage_name',
+      header: '用途名称',
+      size: 150,
+    },
+    {
+      accessorKey: 'subject_code',
+      header: '科目代码',
+      size: 100,
+    },
+    {
+      accessorKey: 'subject_name',
+      header: '科目名称',
+      size: 150,
+    },
+    {
+      accessorKey: 'description',
+      header: '说明',
+      size: 200,
+      cell: ({ row }) => row.original.description || '-',
+    },
+    {
+      header: '操作',
+      size: 100,
+      cell: ({ row }) => (
+        <button
+          onClick={() => handleEditMapping(row.original)}
+          className="btn btn-primary btn-sm"
+        >
+          修改科目
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="students-page">
       <div className="page-header">
         <h1>科目管理</h1>
-        <div className="header-actions">
-          <button onClick={handleAdd} className="btn btn-primary">
-            新增科目
-          </button>
-        </div>
-      </div>
-
-      <div className="search-panel">
-        <div className="search-row">
-          <div className="search-item">
-            <label>科目类型</label>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              <option value="">全部</option>
-              {SUBJECT_TYPES.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+        {activeTab === 'subjects' && (
+          <div className="header-actions">
+            <button onClick={handleAdd} className="btn btn-primary">
+              新增科目
+            </button>
           </div>
-          <button onClick={fetchSubjects} className="btn btn-primary">
-            查询
+        )}
+      </div>
+
+      {/* 标签页切换 */}
+      <div className="tabs-container" style={{ marginBottom: '16px' }}>
+        <div className="tabs">
+          <button
+            className={`tab ${activeTab === 'subjects' ? 'active' : ''}`}
+            onClick={() => setActiveTab('subjects')}
+          >
+            科目列表
+          </button>
+          <button
+            className={`tab ${activeTab === 'mapping' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mapping')}
+          >
+            用途映射
           </button>
         </div>
       </div>
 
-      <div className="table-container">
-        <Table columns={columns} data={subjects} loading={loading} />
-      </div>
+      {/* 科目列表 */}
+      {activeTab === 'subjects' && (
+        <>
+          <div className="search-panel">
+            <div className="search-row">
+              <div className="search-item">
+                <label>科目类型</label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                >
+                  <option value="">全部</option>
+                  {SUBJECT_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={fetchSubjects} className="btn btn-primary">
+                查询
+              </button>
+            </div>
+          </div>
+
+          <div className="table-container">
+            <Table columns={columns} data={paginatedSubjects} loading={loading} />
+            {total > 0 && (
+              <Pagination
+                page={page}
+                pages={pages}
+                total={total}
+                limit={limit}
+                onPageChange={setPage}
+                onLimitChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                }}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 用途映射 */}
+      {activeTab === 'mapping' && (
+        <>
+          <div className="info-panel" style={{ padding: '12px 16px', marginBottom: '16px', backgroundColor: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '4px' }}>
+            <p style={{ margin: 0, color: '#1890ff' }}>
+              用途映射配置各业务场景（如学员缴费、教练工资等）使用的会计科目。修改后，相关业务生成的凭证将使用新配置的科目。
+            </p>
+          </div>
+          <div className="table-container">
+            <Table columns={mappingColumns} data={mappings} loading={mappingLoading} />
+          </div>
+        </>
+      )}
 
       {/* 科目编辑Modal */}
       <Modal
@@ -289,14 +472,13 @@ export default function Subjects() {
             />
           </div>
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center' }}>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={formData.is_active}
                 onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                style={{ marginRight: '8px' }}
               />
-              启用
+              <span>启用此科目</span>
             </label>
           </div>
           <div className="form-actions">
@@ -318,6 +500,61 @@ export default function Subjects() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />
+
+      {/* 映射编辑Modal */}
+      <Modal
+        title="修改科目映射"
+        visible={showMappingModal}
+        onClose={() => { setShowMappingModal(false); setEditingMapping(null); }}
+      >
+        <form onSubmit={handleMappingSubmit} className="form">
+          <div className="form-group">
+            <label>用途代码</label>
+            <input
+              type="text"
+              value={editingMapping?.usage_code || ''}
+              disabled
+            />
+          </div>
+          <div className="form-group">
+            <label>用途名称</label>
+            <input
+              type="text"
+              value={editingMapping?.usage_name || ''}
+              disabled
+            />
+          </div>
+          <div className="form-group">
+            <label>选择科目 *</label>
+            <select
+              value={mappingFormSubjectCode}
+              onChange={(e) => setMappingFormSubjectCode(e.target.value)}
+              required
+            >
+              <option value="">请选择科目</option>
+              {activeSubjects.map(subject => (
+                <option key={subject.id} value={subject.subject_code}>
+                  {subject.subject_code} - {subject.subject_name} ({subject.subject_type})
+                </option>
+              ))}
+            </select>
+          </div>
+          {editingMapping?.description && (
+            <div className="form-group">
+              <label>说明</label>
+              <p style={{ margin: 0, color: '#666' }}>{editingMapping.description}</p>
+            </div>
+          )}
+          <div className="form-actions">
+            <button type="button" onClick={() => { setShowMappingModal(false); setEditingMapping(null); }} className="btn btn-default">
+              取消
+            </button>
+            <button type="submit" className="btn btn-primary">
+              确定
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

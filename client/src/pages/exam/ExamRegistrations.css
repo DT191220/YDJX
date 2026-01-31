@@ -12,12 +12,12 @@
 .page-header h2 {
   margin: 0;
   font-size: 24px;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .btn-primary {
   padding: 10px 20px;
-  background-color: #1976d2;
+  background-color: var(--color-primary-light);
   color: white;
   border: none;
   border-radius: 4px;
@@ -27,11 +27,11 @@
 }
 
 .btn-primary:hover {
-  background-color: #1565c0;
+  background-color: #1d4ed8;
 }
 
 .filter-section {
-  background: #fff;
+  background: var(--color-bg-card);
   padding: 15px;
   border-radius: 4px;
   margin-bottom: 20px;
@@ -48,22 +48,22 @@
   flex: 1;
   min-width: 200px;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
 
 .filter-row select {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
-  background-color: #fff;
+  background-color: var(--color-bg-card);
   cursor: pointer;
 }
 
 .table-container {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -87,7 +87,7 @@
 .form-group label {
   display: block;
   margin-bottom: 5px;
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -95,13 +95,13 @@
 .form-group select {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
 
 .required {
-  color: #f44336;
+  color: var(--color-error);
 }
 
 .badge {
@@ -113,18 +113,18 @@
 }
 
 .badge-default {
-  background-color: #e0e0e0;
-  color: #666;
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .badge-success {
-  background-color: #c8e6c9;
-  color: #2e7d32;
+  background-color: #ecfdf5;
+  color: var(--color-success);
 }
 
 .badge-danger {
-  background-color: #ffcdd2;
-  color: #c62828;
+  background-color: #fef2f2;
+  color: var(--color-error);
 }
 
 .action-buttons {
@@ -142,19 +142,19 @@
 }
 
 .btn-sm.btn-primary {
-  background-color: #1976d2;
+  background-color: var(--color-primary-light);
   color: white;
 }
 
 .btn-sm.btn-primary:hover {
-  background-color: #1565c0;
+  background-color: #1d4ed8;
 }
 
 .btn-sm.btn-danger {
-  background-color: #d32f2f;
+  background-color: var(--color-error);
   color: white;
 }
 
 .btn-sm.btn-danger:hover {
-  background-color: #c62828;
+  background-color: #b91c1c;
 }

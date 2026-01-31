@@ -28,7 +28,8 @@ router.get('/', async (req, res) => {
             whereClause += ' AND es.venue_id = ?';
             params.push(venue_id);
         }
-        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name, ev.address as venue_address
+        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name, ev.address as venue_address,
+              (SELECT COUNT(*) FROM exam_registrations er WHERE er.exam_schedule_id = es.id) as registered_count
        FROM exam_schedules es
        LEFT JOIN exam_venues ev ON es.venue_id = ev.id
        ${whereClause}
@@ -53,7 +54,8 @@ router.get('/monthly/:year/:month', async (req, res) => {
         const { year, month } = req.params;
         const startDate = `${year}-${month.padStart(2, '0')}-01`;
         const endDate = `${year}-${month.padStart(2, '0')}-31`;
-        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name
+        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name,
+              (SELECT COUNT(*) FROM exam_registrations er WHERE er.exam_schedule_id = es.id) as registered_count
        FROM exam_schedules es
        LEFT JOIN exam_venues ev ON es.venue_id = ev.id
        WHERE es.exam_date BETWEEN ? AND ?
@@ -76,7 +78,8 @@ router.get('/monthly/:year/:month', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name, ev.address as venue_address
+        const [schedules] = await database_1.default.query(`SELECT es.*, ev.name as venue_name, ev.address as venue_address,
+              (SELECT COUNT(*) FROM exam_registrations er WHERE er.exam_schedule_id = es.id) as registered_count
        FROM exam_schedules es
        LEFT JOIN exam_venues ev ON es.venue_id = ev.id
        WHERE es.id = ?`, [id]);
@@ -103,12 +106,12 @@ router.get('/:id', async (req, res) => {
 // 创建考试安排
 router.post('/', async (req, res) => {
     try {
-        const { exam_date, exam_type, venue_id, capacity, person_in_charge, notes } = req.body;
+        const { exam_date, exam_type, venue_id, person_in_charge, notes } = req.body;
         // 验证必填字段
-        if (!exam_date || !exam_type || !venue_id || !capacity) {
+        if (!exam_date || !exam_type || !venue_id) {
             return res.status(400).json({
                 success: false,
-                message: '考试日期、考试类型、考试场地和可容纳人数为必填项'
+                message: '考试日期、考试类型、考试场地为必填项'
             });
         }
         // 验证考试类型
@@ -128,8 +131,8 @@ router.post('/', async (req, res) => {
             });
         }
         const [result] = await database_1.default.query(`INSERT INTO exam_schedules 
-       (exam_date, exam_type, venue_id, capacity, arranged_count, person_in_charge, notes)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`, [exam_date, exam_type, venue_id, capacity, person_in_charge, notes]);
+       (exam_date, exam_type, venue_id, person_in_charge, notes)
+       VALUES (?, ?, ?, ?, ?)`, [exam_date, exam_type, venue_id, person_in_charge, notes]);
         res.json({
             success: true,
             message: '创建考试安排成功',
@@ -148,33 +151,26 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { exam_date, exam_type, venue_id, capacity, person_in_charge, notes } = req.body;
+        const { exam_date, exam_type, venue_id, person_in_charge, notes } = req.body;
         // 验证必填字段
-        if (!exam_date || !exam_type || !venue_id || !capacity) {
+        if (!exam_date || !exam_type || !venue_id) {
             return res.status(400).json({
                 success: false,
-                message: '考试日期、考试类型、考试场地和可容纳人数为必填项'
+                message: '考试日期、考试类型、考试场地为必填项'
             });
         }
         // 检查考试安排是否存在
-        const [schedules] = await database_1.default.query('SELECT arranged_count FROM exam_schedules WHERE id = ?', [id]);
+        const [schedules] = await database_1.default.query('SELECT id FROM exam_schedules WHERE id = ?', [id]);
         if (schedules.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: '考试安排不存在'
             });
         }
-        // 验证新容量不能小于已安排人数
-        if (capacity < schedules[0].arranged_count) {
-            return res.status(400).json({
-                success: false,
-                message: `可容纳人数不能小于已安排人数(${schedules[0].arranged_count})`
-            });
-        }
         await database_1.default.query(`UPDATE exam_schedules 
-       SET exam_date = ?, exam_type = ?, venue_id = ?, capacity = ?,
+       SET exam_date = ?, exam_type = ?, venue_id = ?,
            person_in_charge = ?, notes = ?
-       WHERE id = ?`, [exam_date, exam_type, venue_id, capacity, person_in_charge, notes, id]);
+       WHERE id = ?`, [exam_date, exam_type, venue_id, person_in_charge, notes, id]);
         res.json({
             success: true,
             message: '更新考试安排成功'

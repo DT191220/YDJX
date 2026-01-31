@@ -9,7 +9,6 @@ import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
-import { DictSelect } from '../../components/common/DictSelect';
 import { usePagination } from '../../hooks/usePagination';
 import { useDict } from '../../hooks/useDict';
 import { ColumnDef } from '@tanstack/react-table';
@@ -37,7 +36,7 @@ export default function Students() {
 
   useEffect(() => {
     fetchStudents();
-  }, [limit, offset, keyword, statusFilter, coachFilter, dateStart, dateEnd]);
+  }, [limit, offset, statusFilter, coachFilter, dateStart, dateEnd]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -65,6 +64,37 @@ export default function Students() {
   const handleSearch = () => {
     setPage(1);
     fetchStudents();
+  };
+
+  const handleReset = async () => {
+    setKeyword('');
+    setStatusFilter('');
+    setCoachFilter('');
+    setDateStart('');
+    setDateEnd('');
+    setPage(1);
+    
+    // 使用清空的参数直接调用API
+    setLoading(true);
+    try {
+      const response = await studentService.getStudents({
+        limit,
+        offset: 0,
+        keyword: '',
+        status: '' as any,
+        coach_name: '',
+        enrollment_date_start: '',
+        enrollment_date_end: '',
+        sortBy: 'id',
+        sortOrder: 'desc'
+      });
+      setStudents(response.data!.list);
+      setTotal(response.data!.pagination.total);
+    } catch (error) {
+      console.error('获取学员列表失败:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAdd = () => {
@@ -232,18 +262,12 @@ export default function Students() {
             className="date-input"
           />
           
-          <button onClick={handleSearch} className="btn-search">
+          <button onClick={handleSearch} className="btn btn-primary">
             查询
           </button>
           <button 
-            onClick={() => {
-              setKeyword('');
-              setStatusFilter('');
-              setCoachFilter('');
-              setDateStart('');
-              setDateEnd('');
-            }}
-            className="btn-reset"
+            onClick={handleReset}
+            className="btn btn-secondary"
           >
             重置
           </button>
@@ -306,7 +330,6 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
   const getRegionFromIdCard = (idCard: string): string => {
     if (idCard.length < 6) return '';
     const provinceCode = idCard.substring(0, 2);
-    const cityCode = idCard.substring(0, 4);
     
     const provinceMap: Record<string, string> = {
       '11': '北京', '12': '天津', '13': '河北', '14': '山西', '15': '内蒙古',
@@ -377,7 +400,9 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
         dict_value: student.status, 
         dict_label: student.status, 
         sort_order: 0, 
-        status: '禁用' 
+        status: '禁用',
+        created_at: '',
+        updated_at: ''
       });
     }
     return options;
@@ -404,7 +429,7 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
         offset: 0,
         status: '在职'
       });
-      setCoaches(response.data.list || []);
+      setCoaches(response.data?.list || []);
     } catch (error) {
       console.error('获取教练列表失败:', error);
     }
@@ -603,7 +628,7 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
                 <option value="">请选择班型</option>
                 {classTypes.map((classType) => (
                   <option key={classType.id} value={classType.id}>
-                    {classType.name} - ¥{parseFloat(classType.contract_amount).toFixed(2)}
+                    {classType.name} - ¥{parseFloat(String(classType.contract_amount)).toFixed(2)}
                   </option>
                 ))}
               </select>
@@ -618,7 +643,7 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
                 value={formData.license_type || 'C1'}
                 onChange={(e) => setFormData({ ...formData, license_type: e.target.value as LicenseType })}
                 required={formData.status === '报名未缴费'}
-                disabled={student?.id && student.status === '报名未缴费'}
+                disabled={!!(student?.id && student.status === '报名未缴费')}
                 style={student?.id && student.status === '报名未缴费' ? { backgroundColor: '#f5f7fa', color: '#909399', cursor: 'not-allowed' } : undefined}
                 title={student?.id && student.status === '报名未缴费' ? '报名后驾照类型不可修改' : undefined}
               >
@@ -669,7 +694,7 @@ function StudentFormModal({ student, onClose, onSuccess }: StudentFormModalProps
                 value={formData.enrollment_date}
                 onChange={(e) => setFormData({ ...formData, enrollment_date: e.target.value })}
                 required={formData.status === '报名未缴费'}
-                disabled={student?.id && student.status === '报名未缴费'}
+                disabled={!!(student?.id && student.status === '报名未缴费')}
                 style={student?.id && student.status === '报名未缴费' ? { backgroundColor: '#f5f7fa', color: '#909399', cursor: 'not-allowed' } : undefined}
                 title={student?.id && student.status === '报名未缴费' ? '报名后报名日期不可修改' : undefined}
               />

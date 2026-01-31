@@ -238,8 +238,8 @@ function CoachFormModal({ coach, onClose, onSuccess }: CoachFormModalProps) {
   const { options: statusOptions } = useDict('coach_status');
   const { options: teachingSubjectOptions } = useDict('teaching_subject');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
     try {
       if (coach?.id) {

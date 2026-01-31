@@ -136,11 +136,6 @@ export default function VoucherEntry() {
     }
   };
 
-  const getSubjectName = (code: string) => {
-    const subject = subjects.find(s => s.subject_code === code);
-    return subject ? subject.subject_name : '';
-  };
-
   return (
     <div className="students-page">
       <div className="page-header">

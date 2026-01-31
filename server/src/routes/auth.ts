@@ -6,8 +6,11 @@ import { generateToken } from '../middleware/auth';
 
 const router = Router();
 
-// 加密密钥（与前端保持一致）
-const ENCRYPT_KEY = 'YuanDongDrivingSchool2024!@#';
+// 加密密钥从环境变量读取（与前端保持一致）
+const ENCRYPT_KEY = process.env.ENCRYPT_KEY || 'YuanDongDrivingSchool2024!@#';
+if (!process.env.ENCRYPT_KEY && process.env.NODE_ENV === 'production') {
+  console.warn('[安全警告] ENCRYPT_KEY 环境变量未设置，使用默认值');
+}
 
 // 解密密码
 function decryptPassword(encryptedData: string): { password: string; timestamp: number } | null {

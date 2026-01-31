@@ -110,13 +110,91 @@ export interface ProfitReportItem {
   amount: number;
 }
 
+// 分摊费用项
+export interface AllocatedItem {
+  id: number;
+  expense_name: string;
+  subject_code: string;
+  subject_name: string;
+  total_amount: number;
+  monthly_amount: number;
+}
+
 export interface ProfitReport {
   yearMonth: string;
   incomeItems: ProfitReportItem[];
   expenseItems: ProfitReportItem[];
+  allocatedItems: AllocatedItem[];
   totalIncome: number;
   totalExpense: number;
+  totalAllocated: number;
   netProfit: number;
+}
+
+// 年度利润汇总
+export interface MonthlyProfitData {
+  month: number;
+  income: number;
+  expense: number;
+  allocated: number;
+  netProfit: number;
+}
+
+export interface YearlyProfitReport {
+  year: number;
+  monthlyData: MonthlyProfitData[];
+  yearlyTotal: {
+    totalIncome: number;
+    totalExpense: number;
+    totalAllocated: number;
+    netProfit: number;
+  };
+}
+
+// 费用分摊配置
+export interface ExpenseAllocation {
+  id: number;
+  expense_name: string;
+  subject_code: string;
+  subject_name?: string;
+  total_amount: number;
+  allocation_year: number;
+  allocation_method: 'average' | 'custom';
+  monthly_amount: number;
+  start_month: number;
+  end_month: number;
+  remark?: string;
+  is_active: boolean;
+  created_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpenseAllocationFormData {
+  expense_name: string;
+  subject_code: string;
+  total_amount: number;
+  allocation_year: number;
+  allocation_method?: 'average' | 'custom';
+  monthly_amount?: number;
+  start_month?: number;
+  end_month?: number;
+  remark?: string;
+  is_active?: boolean;
+  created_by?: number;
+}
+
+// 科目用途映射
+export interface SubjectMapping {
+  id: number;
+  usage_code: string;
+  usage_name: string;
+  subject_code: string;
+  subject_name?: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface BalanceDetailItem {
@@ -205,9 +283,13 @@ export const financeService = {
   // 财务报表 API
   // ========================================
 
-  // 月度利润表
+  // 月度利润表（含分摊费用）
   getProfitMonthly: (yearMonth: string) =>
     api.get<ProfitReport>(`/finance/reports/profit-monthly?yearMonth=${yearMonth}`),
+
+  // 年度利润汇总
+  getProfitYearly: (year: number) =>
+    api.get<YearlyProfitReport>(`/finance/reports/profit-yearly?year=${year}`),
 
   // 收支明细表
   getBalanceDetail: (params: { startDate: string; endDate: string; subjectType?: string }) =>
@@ -216,6 +298,38 @@ export const financeService = {
   // 科目余额表
   getSubjectBalance: (params: { date: string; subjectType?: string }) =>
     api.get<SubjectBalanceItem[]>('/finance/reports/subject-balance', params),
+
+  // ========================================
+  // 费用分摊配置 API
+  // ========================================
+
+  // 获取费用分摊配置列表
+  getExpenseAllocations: (params?: { year?: number; is_active?: string }) =>
+    api.get<ExpenseAllocation[]>('/finance/expense-allocation', params),
+
+  // 创建费用分摊配置
+  createExpenseAllocation: (data: ExpenseAllocationFormData) =>
+    api.post<{ id: number }>('/finance/expense-allocation', data),
+
+  // 更新费用分摊配置
+  updateExpenseAllocation: (id: number, data: Partial<ExpenseAllocationFormData>) =>
+    api.put(`/finance/expense-allocation/${id}`, data),
+
+  // 删除费用分摊配置
+  deleteExpenseAllocation: (id: number) =>
+    api.delete(`/finance/expense-allocation/${id}`),
+
+  // ========================================
+  // 科目用途映射 API
+  // ========================================
+
+  // 获取科目映射列表
+  getSubjectMappings: () =>
+    api.get<SubjectMapping[]>('/finance/subject-mapping'),
+
+  // 更新科目映射
+  updateSubjectMapping: (id: number, data: { subject_code: string }) =>
+    api.put(`/finance/subject-mapping/${id}`, data),
 };
 
 export default financeService;

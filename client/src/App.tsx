@@ -27,6 +27,7 @@ import Vouchers from './pages/finance/Vouchers'
 import VoucherEntry from './pages/finance/VoucherEntry'
 import HeadquarterConfig from './pages/finance/HeadquarterConfig'
 import Reports from './pages/finance/Reports'
+import Expenses from './pages/operations/Expenses'
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
                     <Route path="/finance/vouchers" element={<Vouchers />} />
                     <Route path="/finance/voucher-entry" element={<VoucherEntry />} />
                     <Route path="/finance/reports" element={<Reports />} />
+                    <Route path="/operations/expenses" element={<Expenses />} />
                     <Route path="/learning/progress" element={<StudentProgress />} />
                     <Route path="/learning/plans" element={<StudyPlans />} />
                     <Route path="/system/users" element={<Users />} />

@@ -15,7 +15,7 @@ export default function Roles() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'启用' | '禁用' | ''>('');
   const [showModal, setShowModal] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -169,7 +169,7 @@ export default function Roles() {
           />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value as '' | '启用' | '禁用')}
             className="filter-select"
           >
             <option value="">全部状态</option>

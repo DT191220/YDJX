@@ -12,12 +12,12 @@
 .page-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .btn-primary {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-primary-light);
   color: white;
   border: none;
   border-radius: 4px;
@@ -28,7 +28,7 @@
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
 }
 
 .filter-bar {
@@ -40,14 +40,14 @@
 .search-input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
 
 .filter-select {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
   min-width: 150px;
@@ -68,21 +68,21 @@
 }
 
 .btn-edit {
-  background: #1890ff;
+  background: var(--color-info);
   color: white;
 }
 
 .btn-edit:hover {
-  background: #40a9ff;
+  background: #0369a1;
 }
 
 .btn-delete {
-  background: #ff4d4f;
+  background: var(--color-error);
   color: white;
 }
 
 .btn-delete:hover {
-  background: #ff7875;
+  background: #b91c1c;
 }
 
 .status-badge {
@@ -93,18 +93,18 @@
 }
 
 .status-active {
-  background: #f0f9ff;
-  color: #1890ff;
+  background: #dbeafe;
+  color: var(--color-info);
 }
 
 .status-inactive {
-  background: #fff1f0;
-  color: #ff4d4f;
+  background: #fef2f2;
+  color: var(--color-error);
 }
 
 .status-leave {
-  background: #fffbe6;
-  color: #faad14;
+  background: #fef3c7;
+  color: var(--color-warning);
 }
 
 /* 表单样式 */
@@ -121,8 +121,8 @@
 .form-section h3 {
   margin: 0 0 16px 0;
   font-size: 1.1rem;
-  color: #333;
-  border-bottom: 2px solid #f0f0f0;
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-bg-alt);
   padding-bottom: 8px;
 }
 
@@ -141,7 +141,7 @@
 .form-group label {
   margin-bottom: 8px;
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -149,7 +149,7 @@
 .form-group select,
 .form-group textarea {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
   transition: border-color 0.2s;
@@ -159,7 +159,7 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-primary-light);
 }
 
 .form-group textarea {
@@ -168,6 +168,6 @@
 }
 
 .required {
-  color: #ff4d4f;
+  color: var(--color-error);
   margin-left: 4px;
 }

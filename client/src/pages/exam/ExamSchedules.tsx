@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { examScheduleService, examVenueService } from '../../services/exam';
 import { ExamSchedule, ExamScheduleFormData, ExamVenue, ExamType } from '../../types/exam';
 import Table from '../../components/common/Table';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import Pagination from '../../components/common/Pagination';
 import { ColumnDef } from '@tanstack/react-table';
 import { subscribe, EVENTS } from '../../utils/events';
 import '../system/Students.css';
@@ -19,6 +20,10 @@ export default function ExamSchedules() {
   const [endDate, setEndDate] = useState('');
   const [examTypeFilter, setExamTypeFilter] = useState('');
   const [venueFilter, setVenueFilter] = useState('');
+  
+  // 分页状态
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   
   const [showModal, setShowModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ExamSchedule | null>(null);
@@ -45,6 +50,21 @@ export default function ExamSchedules() {
       unsubscribe();
     };
   }, []);
+
+  // 筛选条件变化时重置到第一页
+  useEffect(() => {
+    setPage(1);
+  }, [startDate, endDate, examTypeFilter, venueFilter]);
+
+  // 计算分页数据
+  const { paginatedSchedules, total, pages } = useMemo(() => {
+    const total = schedules.length;
+    const pages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedSchedules = schedules.slice(start, end);
+    return { paginatedSchedules, total, pages };
+  }, [schedules, page, limit]);
 
   const fetchSchedules = async () => {
     setLoading(true);
@@ -277,7 +297,22 @@ export default function ExamSchedules() {
         {loading ? (
           <div className="loading">加载中...</div>
         ) : (
-          <Table columns={columns} data={schedules} />
+          <>
+            <Table columns={columns} data={paginatedSchedules} />
+            {total > 0 && (
+              <Pagination
+                page={page}
+                pages={pages}
+                total={total}
+                limit={limit}
+                onPageChange={setPage}
+                onLimitChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                }}
+              />
+            )}
+          </>
         )}
       </div>
 

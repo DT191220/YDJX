@@ -12,12 +12,12 @@
 .page-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .btn-primary {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-primary-light);
   color: white;
   border: none;
   border-radius: 4px;
@@ -28,13 +28,13 @@
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
 }
 
 .loading {
   text-align: center;
   padding: 40px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .statistics-overview {
@@ -45,69 +45,69 @@
 }
 
 .stat-card {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 24px;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border-left: 4px solid #ddd;
+  box-shadow: var(--shadow-md);
+  border-left: 4px solid var(--color-border);
 }
 
 .stat-card.success {
-  border-left-color: #52c41a;
+  border-left-color: var(--color-success);
 }
 
 .stat-card.danger {
-  border-left-color: #ff4d4f;
+  border-left-color: var(--color-error);
 }
 
 .stat-card.warning {
-  border-left-color: #faad14;
+  border-left-color: var(--color-warning);
 }
 
 .stat-card.primary {
-  border-left-color: #1890ff;
+  border-left-color: var(--color-primary-light);
 }
 
 .stat-value {
   font-size: 2rem;
   font-weight: 600;
-  color: #333;
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 
 .stat-card.success .stat-value {
-  color: #52c41a;
+  color: var(--color-success);
 }
 
 .stat-card.danger .stat-value {
-  color: #ff4d4f;
+  color: var(--color-error);
 }
 
 .stat-card.warning .stat-value {
-  color: #faad14;
+  color: var(--color-warning);
 }
 
 .stat-card.primary .stat-value {
-  color: #1890ff;
+  color: var(--color-primary-light);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .statistics-detail {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .statistics-detail h3 {
   margin: 0 0 16px 0;
   font-size: 1.1rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .statistics-table {
@@ -119,36 +119,36 @@
 .statistics-table td {
   padding: 12px;
   text-align: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .statistics-table th {
-  background: #fafafa;
+  background: var(--color-bg-alt);
   font-weight: 500;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .statistics-table tbody tr:hover {
-  background: #f5f5f5;
+  background: var(--color-bg-alt);
 }
 
 .text-success {
-  color: #52c41a;
+  color: var(--color-success);
   font-weight: 500;
 }
 
 .text-danger {
-  color: #ff4d4f;
+  color: var(--color-error);
   font-weight: 500;
 }
 
 .text-warning {
-  color: #faad14;
+  color: var(--color-warning);
   font-weight: 500;
 }
 
 .text-primary {
-  color: #1890ff;
+  color: var(--color-primary-light);
   font-weight: 500;
 }
 
@@ -170,17 +170,17 @@
 }
 
 .no-data {
-  color: #999;
+  color: var(--color-text-muted);
   font-style: italic;
   padding: 20px !important;
 }
 
 .stat-card.info {
-  border-left-color: #909399;
+  border-left-color: var(--color-text-muted);
 }
 
 .stat-card.info .stat-value {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .year-selector {
@@ -191,33 +191,33 @@
 
 .year-selector label {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .year-selector select {
   padding: 8px 12px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
   outline: none;
 }
 
 .year-selector select:focus {
-  border-color: #409eff;
+  border-color: var(--color-primary-light);
 }
 
 .statistics-section {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
   margin-bottom: 24px;
 }
 
 .statistics-section h3 {
   margin: 0 0 16px 0;
   font-size: 1.1rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .chart-container {
@@ -262,16 +262,50 @@
   left: 50%;
   transform: translateX(-50%);
   font-size: 12px;
-  color: #409eff;
+  color: var(--color-primary-light);
   font-weight: 500;
 }
 
 .bar-label {
   margin-top: 8px;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .exam-statistics-page {
   padding: 20px;
+}
+
+/* 表格滚动容器 */
+.table-scroll-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.table-scroll-container .statistics-table {
+  margin: 0;
+}
+
+.table-scroll-container .statistics-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-scroll-container .statistics-table th {
+  background: #f8fafc;
+  border-bottom: 2px solid var(--color-border);
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
+/* 高亮当前年份行 */
+.statistics-table .highlight-row {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.statistics-table .highlight-row:hover {
+  background: rgba(37, 99, 235, 0.12);
 }

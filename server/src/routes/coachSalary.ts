@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/database';
-import { ResultSetHeader, RowDataPacket, PoolConnection } from 'mysql2/promise';
-import { generateVoucherNo } from './finance';
+import { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { getSubjectCodes } from './finance';
 
 const router = Router();
 
@@ -181,7 +181,12 @@ router.post('/generate', async (req: Request, res: Response) => {
 
       // 计算工资（默认出勤天数为0，需要手动填写）
       const attendanceDays = 0;
-      const baseSalary = attendanceDays * baseDailySalary;
+      // 满勤30天特殊处理：按2000元计算
+      const FULL_ATTENDANCE_DAYS = 30;
+      const FULL_ATTENDANCE_SALARY = 2000;
+      const baseSalary = attendanceDays >= FULL_ATTENDANCE_DAYS 
+        ? FULL_ATTENDANCE_SALARY 
+        : attendanceDays * baseDailySalary;
       const subject2Comm = subject2PassCount * subject2Commission;
       const subject3Comm = subject3PassCount * subject3Commission;
       const recruitmentComm = newStudentCount * recruitmentCommission;
@@ -332,7 +337,12 @@ router.put('/:id', async (req: Request, res: Response) => {
     const newBonus = bonus !== undefined ? Number(bonus) : Number(record.bonus);
     const newDeduction = deduction !== undefined ? Number(deduction) : Number(record.deduction);
 
-    const baseSalary = newAttendanceDays * baseDailySalary;
+    // 满勤30天特殊处理：按2000元计算
+    const FULL_ATTENDANCE_DAYS = 30;
+    const FULL_ATTENDANCE_SALARY = 2000;
+    const baseSalary = newAttendanceDays >= FULL_ATTENDANCE_DAYS 
+      ? FULL_ATTENDANCE_SALARY 
+      : newAttendanceDays * baseDailySalary;
     const subject2Comm = Number(subject2PassCount) * subject2Commission;
     const subject3Comm = Number(subject3PassCount) * subject3Commission;
     const recruitmentComm = Number(newStudentCount) * recruitmentCommission;
@@ -383,8 +393,27 @@ router.put('/:id', async (req: Request, res: Response) => {
     // 如果状态从非 paid 变为 paid，自动生成财务凭证
     if (newStatus === 'paid' && previousStatus !== 'paid' && finalNetSalary > 0) {
       try {
+        // 获取科目映射
+        const subjectMapping = await getSubjectCodes(['BANK_DEPOSIT', 'COACH_SALARY'], connection);
+        
         const paymentDate = new Date();
-        const voucherNo = await generateVoucherNo(paymentDate, connection as PoolConnection);
+        
+        // 简化凭证号生成：直接查询最大凭证号
+        const year = paymentDate.getFullYear();
+        const month = String(paymentDate.getMonth() + 1).padStart(2, '0');
+        const yearMonth = `${year}${month}`;
+        
+        const [maxRows] = await connection.query<RowDataPacket[]>(
+          `SELECT voucher_no FROM finance_vouchers WHERE voucher_no LIKE ? ORDER BY id DESC LIMIT 1`,
+          [`${yearMonth}-%`]
+        );
+        
+        let seq = 1;
+        if (maxRows.length > 0 && maxRows[0].voucher_no) {
+          const lastSeq = parseInt(maxRows[0].voucher_no.split('-')[1], 10);
+          seq = lastSeq + 1;
+        }
+        const voucherNo = `${yearMonth}-${String(seq).padStart(3, '0')}`;
         
         const [voucherResult] = await connection.query<ResultSetHeader>(
           `INSERT INTO finance_vouchers (voucher_no, voucher_date, description, creator_id, creator_name, source_type, source_id) 
@@ -393,21 +422,22 @@ router.put('/:id', async (req: Request, res: Response) => {
         );
         const voucherId = voucherResult.insertId;
 
-        // 借：教练工资 (209) - 确认支出
+        // 借：教练工资 - 确认支出
         await connection.query(
           `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
-           VALUES (?, '借', '209', ?, '教练工资支出', 0)`,
-          [voucherId, finalNetSalary]
+           VALUES (?, '借', ?, ?, '教练工资支出', 0)`,
+          [voucherId, subjectMapping['COACH_SALARY'], finalNetSalary]
         );
-        // 贷：银行存款 (1001) - 资金流出
+        // 贷：银行存款 - 资金流出
         await connection.query(
           `INSERT INTO finance_voucher_items (voucher_id, entry_type, subject_code, amount, summary, seq) 
-           VALUES (?, '贷', '1001', ?, '发放教练工资', 1)`,
-          [voucherId, finalNetSalary]
+           VALUES (?, '贷', ?, ?, '发放教练工资', 1)`,
+          [voucherId, subjectMapping['BANK_DEPOSIT'], finalNetSalary]
         );
-      } catch (financeError) {
+        console.log('教练工资凭证创建成功:', voucherNo);
+      } catch (financeError: any) {
         // 财务凭证创建失败不影响工资发放主流程，仅记录日志
-        console.error('自动创建教练工资财务凭证失败:', financeError);
+        console.error('自动创建教练工资财务凭证失败:', financeError.message, financeError.code);
       }
     }
 
@@ -529,7 +559,12 @@ router.post('/refresh', async (req: Request, res: Response) => {
       const bonus = Number(salary.bonus || 0);
       const deduction = Number(salary.deduction || 0);
       
-      const baseSalary = attendanceDays * baseDailySalary;
+      // 满勤30天特殊处理：按2000元计算
+      const FULL_ATTENDANCE_DAYS = 30;
+      const FULL_ATTENDANCE_SALARY = 2000;
+      const baseSalary = attendanceDays >= FULL_ATTENDANCE_DAYS 
+        ? FULL_ATTENDANCE_SALARY 
+        : attendanceDays * baseDailySalary;
       const subject2Comm = subject2PassCount * subject2Commission;
       const subject3Comm = subject3PassCount * subject3Commission;
       const recruitmentComm = newStudentCount * recruitmentCommission;

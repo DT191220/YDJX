@@ -3,9 +3,10 @@ export interface Permission {
   id: number;
   permission_name: string;
   permission_code: string;
-  permission_type: '菜单' | '按钮' | '接口';
-  parent_id: number;
+  permission_type: '菜单' | '按钮' | '接口' | 'menu' | 'button' | 'api';
+  parent_id: number | null;
   path?: string;
+  route_path?: string;
   icon?: string;
   sort_order: number;
   status: '启用' | '禁用';
@@ -17,9 +18,10 @@ export interface Permission {
 export interface PermissionFormData {
   permission_name: string;
   permission_code: string;
-  permission_type: '菜单' | '按钮' | '接口';
-  parent_id: number;
+  permission_type: '菜单' | '按钮' | '接口' | 'menu' | 'button' | 'api';
+  parent_id: number | null;
   path?: string;
+  route_path?: string;
   icon?: string;
   sort_order: number;
   status: '启用' | '禁用';

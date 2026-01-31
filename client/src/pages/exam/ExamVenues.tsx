@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { examVenueService } from '../../services/exam';
 import { ExamVenue, ExamVenueFormData } from '../../types/exam';
 import Table from '../../components/common/Table';
 import Modal from '../../components/common/Modal';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import Pagination from '../../components/common/Pagination';
 import { ColumnDef } from '@tanstack/react-table';
 import '../system/Students.css';
 
@@ -12,6 +13,10 @@ export default function ExamVenues() {
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  
+  // 分页状态
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   
   const [showModal, setShowModal] = useState(false);
   const [editingVenue, setEditingVenue] = useState<ExamVenue | null>(null);
@@ -26,6 +31,21 @@ export default function ExamVenues() {
   useEffect(() => {
     fetchVenues();
   }, [keyword, statusFilter]);
+
+  // 筛选条件变化时重置到第一页
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, statusFilter]);
+
+  // 计算分页数据
+  const { paginatedVenues, total, pages } = useMemo(() => {
+    const total = venues.length;
+    const pages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedVenues = venues.slice(start, end);
+    return { paginatedVenues, total, pages };
+  }, [venues, page, limit]);
 
   const fetchVenues = async () => {
     setLoading(true);
@@ -197,7 +217,22 @@ export default function ExamVenues() {
         {loading ? (
           <div className="loading">加载中...</div>
         ) : (
-          <Table columns={columns} data={venues} />
+          <>
+            <Table columns={columns} data={paginatedVenues} />
+            {total > 0 && (
+              <Pagination
+                page={page}
+                pages={pages}
+                total={total}
+                limit={limit}
+                onPageChange={setPage}
+                onLimitChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                }}
+              />
+            )}
+          </>
         )}
       </div>
 

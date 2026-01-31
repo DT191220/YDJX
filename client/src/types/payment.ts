@@ -76,14 +76,17 @@ export interface StudentPaymentInfo {
   id_card: string;
   class_type_id?: number;
   class_type_name?: string;
-  contract_amount: number;
-  actual_amount: number;
-  discount_amount: number;
-  payable_amount: number;
-  debt_amount: number;
-  account_balance: number;
+  contract_amount: number | string;
+  actual_amount: number | string;
+  discount_amount: number | string;
+  payable_amount: number | string;
+  debt_amount: number | string;
+  account_balance: number | string;
   payment_status: PaymentStatus;
   enrollment_date?: string;
+  status?: string;
+  submit_status?: string;
+  submit_date?: string;
 }
 
 // 缴费统计信息

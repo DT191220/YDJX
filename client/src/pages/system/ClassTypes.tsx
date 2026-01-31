@@ -191,7 +191,7 @@ export default function ClassTypes() {
       accessorKey: 'contract_amount',
       header: '合同金额',
       size: 100,
-      cell: ({ row }) => `¥${parseFloat(row.original.contract_amount).toFixed(2)}`,
+      cell: ({ row }) => `¥${Number(row.original.contract_amount).toFixed(2)}`,
     },
     {
       accessorKey: 'description',
@@ -371,7 +371,7 @@ export default function ClassTypes() {
                 />
               </div>
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center' }}>
+                <label className="checkbox-label">
                   <input
                     type="checkbox"
                     checked={config.is_included === 1}
@@ -380,9 +380,8 @@ export default function ClassTypes() {
                       newConfigs[index].is_included = e.target.checked ? 1 : 0;
                       setServiceConfigs(newConfigs);
                     }}
-                    style={{ marginRight: '8px' }}
                   />
-                  包含此科目服务
+                  <span>包含此科目服务</span>
                 </label>
               </div>
             </div>

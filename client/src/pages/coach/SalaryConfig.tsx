@@ -48,7 +48,7 @@ export default function SalaryConfig() {
     setShowModal(true);
   };
 
-  const handleEdit = (config: SalaryConfig) => {
+  const handleEdit = (config: SalaryConfigType) => {
     setEditingConfig(config);
     setShowModal(true);
   };
@@ -224,8 +224,8 @@ function ConfigFormModal({ config, onClose, onSuccess }: ConfigFormModalProps) {
     remarks: config?.remarks || ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
     try {
       if (config?.id) {

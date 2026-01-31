@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { paymentService, classTypeService } from '../../services/payment';
+import { paymentService } from '../../services/payment';
 import { studentService } from '../../services/student';
 import { financeService, HeadquarterConfig } from '../../services/finance';
-import { StudentPaymentInfo, PaymentRecord, PaymentMethod, ClassType } from '../../types/payment';
+import { StudentPaymentInfo, PaymentRecord, PaymentMethod } from '../../types/payment';
 import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
@@ -12,6 +12,14 @@ import { useDict } from '../../hooks/useDict';
 import { ColumnDef } from '@tanstack/react-table';
 import '../system/Students.css';
 
+// 辅助函数：安全转换金额为数字
+const toNumber = (value: number | string | undefined | null): number => {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'number') return value;
+  const num = parseFloat(value);
+  return isNaN(num) ? 0 : num;
+};
+
 // 上缴确认信息接口
 interface SubmitConfirmInfo {
   student: StudentPaymentInfo;
@@ -19,6 +27,12 @@ interface SubmitConfirmInfo {
   finalReceipt: number;      // 最终实收 = 实收金额 + 账户余额
   submitAmount: number;       // 上缴金额
   profit: number;            // 利润 = 最终实收 - 上缴金额
+}
+
+// 上缴表单
+interface SubmitForm {
+  operator: string;
+  remark: string;
 }
 
 export default function StudentPayment() {
@@ -34,10 +48,10 @@ export default function StudentPayment() {
   const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentPaymentInfo | null>(null);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
-  const [classTypes, setClassTypes] = useState<ClassType[]>([]);
   const [deletePaymentId, setDeletePaymentId] = useState<number | null>(null);
   const [submitConfirmInfo, setSubmitConfirmInfo] = useState<SubmitConfirmInfo | null>(null);
   const [submitConfirmLoading, setSubmitConfirmLoading] = useState(false);
+  const [submitExecuting, setSubmitExecuting] = useState(false);
 
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
@@ -59,6 +73,11 @@ export default function StudentPayment() {
     notes: ''
   });
 
+  const [submitForm, setSubmitForm] = useState<SubmitForm>({
+    operator: '',
+    remark: ''
+  });
+
   const { limit, offset, total, setTotal, page, pages, setPage, setLimit } = usePagination();
 
   // 使用字典获取下拉选项
@@ -67,7 +86,6 @@ export default function StudentPayment() {
 
   useEffect(() => {
     fetchStudents();
-    fetchClassTypes();
   }, [limit, offset, keyword, paymentStatusFilter]);
 
   const fetchStudents = async () => {
@@ -77,7 +95,7 @@ export default function StudentPayment() {
         limit,
         offset,
         keyword,
-        status: '', // 不传入特定状态,在后端过滤
+        status: undefined, // 不传入特定状态,在后端过滤
         sortBy: 'id',
         sortOrder: 'desc'
       });
@@ -87,22 +105,13 @@ export default function StudentPayment() {
         student => student.status !== '咨询中' && student.status !== '预约报名'
       );
       
-      setStudents(filteredStudents);
+      setStudents(filteredStudents as unknown as StudentPaymentInfo[]);
       // 注意：这里total仍使用后端返回的总数，如需精确统计需要后端支持
       setTotal(response.data!.pagination.total);
     } catch (error) {
       console.error('获取学员列表失败:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchClassTypes = async () => {
-    try {
-      const response = await classTypeService.getEnabledClassTypes();
-      setClassTypes(response.data);
-    } catch (error) {
-      console.error('获取班型列表失败:', error);
     }
   };
 
@@ -178,8 +187,8 @@ export default function StudentPayment() {
       }
       
       // 计算最终实收 = 实收金额 + 账户余额
-      const actualAmount = parseFloat(student.actual_amount || '0');
-      const accountBalance = parseFloat(student.account_balance || '0');
+      const actualAmount = toNumber(student.actual_amount);
+      const accountBalance = toNumber(student.account_balance);
       const finalReceipt = actualAmount + accountBalance;
       
       // 计算上缴金额
@@ -187,7 +196,7 @@ export default function StudentPayment() {
       if (config) {
         if (config.config_type === 'ratio') {
           // 按比例计算：使用合同金额 * 比例
-          const contractAmount = parseFloat(student.contract_amount || '0');
+          const contractAmount = toNumber(student.contract_amount);
           submitAmount = contractAmount * Number(config.ratio || 0);
         } else {
           // 固定金额
@@ -205,12 +214,98 @@ export default function StudentPayment() {
         submitAmount,
         profit
       });
+      setSubmitForm({ operator: '', remark: '' });
       setShowSubmitConfirmModal(true);
     } catch (error) {
       console.error('获取上缴配置失败:', error);
       alert('获取上缴配置失败');
     } finally {
       setSubmitConfirmLoading(false);
+    }
+  };
+
+  // 执行上缴确认操作
+  const handleExecuteSubmit = async () => {
+    if (!submitConfirmInfo) return;
+
+    if (!submitForm.operator) {
+      alert('请填写经办人');
+      return;
+    }
+
+    if (!submitConfirmInfo.config) {
+      alert('未配置上缴规则，无法执行上缴');
+      return;
+    }
+
+    // 检查是否已上缴
+    if ((submitConfirmInfo.student as any).submit_status === '已上缴') {
+      alert('该学员已完成上缴确认，不能重复操作');
+      return;
+    }
+
+    setSubmitExecuting(true);
+    try {
+      const response = await paymentService.submitConfirm({
+        student_id: submitConfirmInfo.student.id,
+        operator: submitForm.operator,
+        remark: submitForm.remark
+      });
+
+      if (response.success) {
+        alert(`上缴确认成功！\n凭证号：${response.data.voucher_no || '无'}\n上缴金额：¥${Number(response.data.submit_amount).toFixed(2)}\n利润：¥${Number(response.data.profit).toFixed(2)}`);
+        setShowSubmitConfirmModal(false);
+        fetchStudents();
+      } else {
+        alert(response.message || '上缴确认失败');
+      }
+    } catch (error: any) {
+      console.error('上缴确认失败:', error);
+      alert(error.response?.data?.message || '上缴确认失败');
+    } finally {
+      setSubmitExecuting(false);
+    }
+  };
+
+  // 执行撤销上缴操作
+  const handleExecuteRevoke = async () => {
+    if (!submitConfirmInfo) return;
+
+    if (!submitForm.operator) {
+      alert('请填写经办人');
+      return;
+    }
+
+    // 检查是否已上缴
+    if ((submitConfirmInfo.student as any).submit_status !== '已上缴') {
+      alert('该学员未上缴，无需撤销');
+      return;
+    }
+
+    if (!confirm(`确定要撤销该学员的上缴吗？\n上缴金额：¥${Number((submitConfirmInfo.student as any).submit_amount || 0).toFixed(2)}`)) {
+      return;
+    }
+
+    setSubmitExecuting(true);
+    try {
+      const response = await paymentService.submitRevoke({
+        student_id: submitConfirmInfo.student.id,
+        operator: submitForm.operator,
+        remark: submitForm.remark
+      });
+
+      if (response.success) {
+        alert(`撤销上缴成功！\n凭证号：${response.data.voucher_no || '无'}\n撤销金额：¥${Number(response.data.revoke_amount).toFixed(2)}`);
+        setShowSubmitConfirmModal(false);
+        fetchStudents();
+      } else {
+        alert(response.message || '撤销上缴失败');
+      }
+    } catch (error: any) {
+      console.error('撤销上缴失败:', error);
+      alert(error.response?.data?.message || '撤销上缴失败');
+    } finally {
+      setSubmitExecuting(false);
     }
   };
 
@@ -249,7 +344,7 @@ export default function StudentPayment() {
     if (!selectedStudent) return;
 
     const refundAmount = parseFloat(refundForm.amount);
-    const actualAmount = parseFloat(selectedStudent.actual_amount || 0);
+    const actualAmount = toNumber(selectedStudent.actual_amount);
 
     if (!refundForm.amount || !refundForm.operator) {
       alert('请填写退费金额和经办人');
@@ -289,7 +384,7 @@ export default function StudentPayment() {
     if (!selectedStudent) return;
 
     const discountAmount = parseFloat(discountForm.amount);
-    const actualAmount = parseFloat(selectedStudent.actual_amount || 0);
+    const actualAmount = toNumber(selectedStudent.actual_amount);
 
     if (!discountForm.amount || !discountForm.operator) {
       alert('请填写减免金额和经办人');
@@ -328,15 +423,15 @@ export default function StudentPayment() {
 
     try {
       await paymentService.deletePayment(deletePaymentId);
-      alert('缴费记录删除成功');
+      alert('缴费记录撤销成功，已生成冲销凭证');
       setDeletePaymentId(null);
       if (selectedStudent) {
         await fetchPaymentRecords(selectedStudent.id);
       }
       fetchStudents();
     } catch (error: any) {
-      console.error('删除缴费记录失败:', error);
-      alert(error.response?.data?.message || '删除缴费记录失败');
+      console.error('撤销缴费记录失败:', error);
+      alert(error.response?.data?.message || '撤销缴费记录失败');
     }
   };
 
@@ -352,98 +447,72 @@ export default function StudentPayment() {
 
   const columns: ColumnDef<StudentPaymentInfo, any>[] = [
     {
-      accessorKey: 'id',
-      header: 'ID',
-      size: 60,
-    },
-    {
       accessorKey: 'name',
       header: '姓名',
-      size: 100,
+      size: 80,
     },
     {
       accessorKey: 'phone',
       header: '手机号',
-      size: 120,
+      size: 110,
     },
     {
       accessorKey: 'class_type_name',
-      header: '报名班型',
-      size: 100,
+      header: '班型',
+      size: 80,
       cell: ({ row }) => row.original.class_type_name || '-',
     },
     {
       accessorKey: 'contract_amount',
-      header: '合同金额',
-      size: 100,
-      cell: ({ row }) => `¥${parseFloat(row.original.contract_amount || 0).toFixed(2)}`,
+      header: '合同',
+      size: 80,
+      cell: ({ row }) => `¥${toNumber(row.original.contract_amount).toFixed(0)}`,
     },
     {
       accessorKey: 'discount_amount',
-      header: '减免金额',
-      size: 100,
-      cell: ({ row }) => `¥${parseFloat(row.original.discount_amount || 0).toFixed(2)}`,
-    },
-    {
-      accessorKey: 'payable_amount',
-      header: '应缴金额',
-      size: 100,
+      header: '减免',
+      size: 70,
       cell: ({ row }) => {
-        const payable = parseFloat(row.original.contract_amount || 0) - parseFloat(row.original.discount_amount || 0);
-        return (
-          <span style={{ fontWeight: 'bold', color: '#409eff' }}>
-            ¥{payable.toFixed(2)}
-          </span>
-        );
+        const discount = toNumber(row.original.discount_amount);
+        return discount > 0 ? <span style={{ color: '#e6a23c' }}>-¥{discount.toFixed(0)}</span> : '-';
       },
     },
     {
       accessorKey: 'actual_amount',
-      header: '实收金额',
-      size: 100,
-      cell: ({ row }) => `¥${parseFloat(row.original.actual_amount || 0).toFixed(2)}`,
+      header: '实收',
+      size: 80,
+      cell: ({ row }) => (
+        <span style={{ color: '#67c23a' }}>¥{toNumber(row.original.actual_amount).toFixed(0)}</span>
+      ),
     },
     {
       accessorKey: 'debt_amount',
-      header: '欠费金额',
-      size: 100,
+      header: '欠费',
+      size: 80,
       cell: ({ row }) => {
-        const debt = parseFloat(row.original.debt_amount || 0);
+        const debt = toNumber(row.original.debt_amount);
         const paymentStatus = row.original.payment_status;
-        
-        // 已退费学员显示 "-"，避免字段类型问题
-        if (paymentStatus === '已退费') {
-          return (
-            <span style={{ color: '#909399' }}>
-              -
-            </span>
-          );
-        }
-        
+        if (paymentStatus === '已退费') return <span style={{ color: '#909399' }}>-</span>;
         return (
-          <span style={{ fontWeight: 'bold', color: debt > 0 ? '#f56c6c' : '#67c23a' }}>
-            ¥{debt.toFixed(2)}
+          <span style={{ fontWeight: 600, color: debt > 0 ? '#f56c6c' : '#67c23a' }}>
+            {debt > 0 ? `¥${debt.toFixed(0)}` : '¥0'}
           </span>
         );
       },
     },
     {
       accessorKey: 'account_balance',
-      header: '账户余额',
-      size: 100,
+      header: '余额',
+      size: 70,
       cell: ({ row }) => {
-        const balance = parseFloat(row.original.account_balance || 0);
-        return (
-          <span style={{ fontWeight: 'bold', color: balance > 0 ? '#409eff' : '#909399' }}>
-            ¥{balance.toFixed(2)}
-          </span>
-        );
+        const balance = toNumber(row.original.account_balance);
+        return balance > 0 ? <span style={{ color: '#409eff' }}>¥{balance.toFixed(0)}</span> : '-';
       },
     },
     {
       accessorKey: 'payment_status',
-      header: '缴费状态',
-      size: 100,
+      header: '缴费',
+      size: 80,
       cell: ({ row }) => (
         <span className={`badge ${getPaymentStatusBadge(row.original.payment_status)}`}>
           {row.original.payment_status}
@@ -451,47 +520,66 @@ export default function StudentPayment() {
       ),
     },
     {
+      accessorKey: 'submit_status',
+      header: '上缴',
+      size: 70,
+      cell: ({ row }) => {
+        const submitStatus = (row.original as any).submit_status || '未上缴';
+        return (
+          <span className={`badge ${submitStatus === '已上缴' ? 'badge-green' : 'badge-gray'}`}>
+            {submitStatus}
+          </span>
+        );
+      },
+    },
+    {
       header: '操作',
-      size: 350,
-      cell: ({ row }) => (
-        <div className="action-buttons">
-          <button
-            onClick={() => handleAddPayment(row.original)}
-            className="btn btn-primary btn-sm"
-            disabled={row.original.payment_status === '已退费'}
-          >
-            添加缴费
-          </button>
-          <button
-            onClick={() => handleViewRecords(row.original)}
-            className="btn btn-info btn-sm"
-          >
-            缴费记录
-          </button>
-          <button
-            onClick={() => handleDiscount(row.original)}
-            className="btn btn-success btn-sm"
-            disabled={row.original.payment_status === '已退费' || parseFloat(row.original.actual_amount || 0) === 0}
-          >
-            减免
-          </button>
-          <button
-            onClick={() => handleRefund(row.original)}
-            className="btn btn-warning btn-sm"
-            disabled={row.original.payment_status === '已退费' || parseFloat(row.original.actual_amount || 0) === 0}
-          >
-            退费
-          </button>
-          <button
-            onClick={() => handleSubmitConfirm(row.original)}
-            className="btn btn-sm"
-            style={{ backgroundColor: '#722ed1', color: '#fff' }}
-            disabled={submitConfirmLoading}
-          >
-            上缴确认
-          </button>
-        </div>
-      ),
+      size: 220,
+      cell: ({ row }) => {
+        const submitStatus = (row.original as any).submit_status || '未上缴';
+        return (
+          <div className="action-buttons">
+            <button
+              onClick={() => handleAddPayment(row.original)}
+              className="btn btn-primary btn-sm"
+              disabled={row.original.payment_status === '已退费'}
+            >
+              缴费
+            </button>
+            <button
+              onClick={() => handleViewRecords(row.original)}
+              className="btn btn-info btn-sm"
+            >
+              记录
+            </button>
+            <button
+              onClick={() => handleDiscount(row.original)}
+              className="btn btn-success btn-sm"
+              disabled={row.original.payment_status === '已退费' || toNumber(row.original.actual_amount) === 0}
+            >
+              减免
+            </button>
+            <button
+              onClick={() => handleRefund(row.original)}
+              className="btn btn-warning btn-sm"
+              disabled={row.original.payment_status === '已退费' || toNumber(row.original.actual_amount) === 0}
+            >
+              退费
+            </button>
+            <button
+              onClick={() => handleSubmitConfirm(row.original)}
+              className="btn btn-sm"
+              style={{ 
+                backgroundColor: submitStatus === '已上缴' ? '#52c41a' : '#722ed1', 
+                color: '#fff' 
+              }}
+              disabled={submitConfirmLoading}
+            >
+              {submitStatus === '已上缴' ? '已上缴' : '上缴确认'}
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -505,7 +593,7 @@ export default function StudentPayment() {
       accessorKey: 'amount',
       header: '缴费金额',
       size: 100,
-      cell: ({ row }) => `¥${parseFloat(row.original.amount).toFixed(2)}`,
+      cell: ({ row }) => `¥${Number(row.original.amount).toFixed(2)}`,
     },
     {
       accessorKey: 'payment_method',
@@ -529,9 +617,9 @@ export default function StudentPayment() {
       cell: ({ row }) => (
         <button
           onClick={() => setDeletePaymentId(row.original.id)}
-          className="btn btn-danger btn-sm"
+          className="btn btn-warning btn-sm"
         >
-          删除
+          撤销
         </button>
       ),
     },
@@ -668,26 +756,26 @@ export default function StudentPayment() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <strong>合同金额：</strong>
-              <span>¥{parseFloat(selectedStudent?.contract_amount || 0).toFixed(2)}</span>
+              <span>¥{toNumber(selectedStudent?.contract_amount).toFixed(2)}</span>
             </div>
             <div>
               <strong>减免金额：</strong>
-              <span>¥{parseFloat(selectedStudent?.discount_amount || 0).toFixed(2)}</span>
+              <span>¥{toNumber(selectedStudent?.discount_amount).toFixed(2)}</span>
             </div>
             <div>
               <strong>实收金额：</strong>
-              <span>¥{parseFloat(selectedStudent?.actual_amount || 0).toFixed(2)}</span>
+              <span>¥{toNumber(selectedStudent?.actual_amount).toFixed(2)}</span>
             </div>
             <div>
               <strong>欠费金额：</strong>
-              <span style={{ color: parseFloat(selectedStudent?.debt_amount || 0) > 0 ? '#f56c6c' : '#67c23a' }}>
-                ¥{parseFloat(selectedStudent?.debt_amount || 0).toFixed(2)}
+              <span style={{ color: toNumber(selectedStudent?.debt_amount) > 0 ? '#f56c6c' : '#67c23a' }}>
+                ¥{toNumber(selectedStudent?.debt_amount).toFixed(2)}
               </span>
             </div>
             <div>
               <strong>账户余额：</strong>
-              <span style={{ color: parseFloat(selectedStudent?.account_balance || 0) > 0 ? '#409eff' : '#909399' }}>
-                ¥{parseFloat(selectedStudent?.account_balance || 0).toFixed(2)}
+              <span style={{ color: toNumber(selectedStudent?.account_balance) > 0 ? '#409eff' : '#909399' }}>
+                ¥{toNumber(selectedStudent?.account_balance).toFixed(2)}
               </span>
             </div>
             <div>
@@ -712,12 +800,12 @@ export default function StudentPayment() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '14px' }}>
               <div>
                 <strong>合同金额：</strong>
-                <span>¥{parseFloat(selectedStudent?.contract_amount || 0).toFixed(2)}</span>
+                <span>¥{toNumber(selectedStudent?.contract_amount).toFixed(2)}</span>
               </div>
               <div>
                 <strong>当前实收金额：</strong>
                 <span style={{ color: '#409eff', fontWeight: 'bold' }}>
-                  ¥{parseFloat(selectedStudent?.actual_amount || 0).toFixed(2)}
+                  ¥{toNumber(selectedStudent?.actual_amount).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -729,7 +817,7 @@ export default function StudentPayment() {
               type="number"
               step="0.01"
               min="0.01"
-              max={parseFloat(selectedStudent?.actual_amount || 0)}
+              max={toNumber(selectedStudent?.actual_amount)}
               value={refundForm.amount}
               onChange={(e) => {
                 const value = e.target.value;
@@ -742,7 +830,7 @@ export default function StudentPayment() {
               placeholder="请输入退费金额"
             />
             <small style={{ color: '#999', display: 'block', marginTop: '4px' }}>
-              最大可退费金额：¥{parseFloat(selectedStudent?.actual_amount || 0).toFixed(2)}
+              最大可退费金额：¥{toNumber(selectedStudent?.actual_amount).toFixed(2)}
             </small>
           </div>
 
@@ -778,11 +866,11 @@ export default function StudentPayment() {
         </form>
       </Modal>
 
-      {/* 删除确认对话框 */}
+      {/* 撤销确认对话框 */}
       <ConfirmDialog
         visible={!!deletePaymentId}
-        title="确认删除"
-        message="删除缴费记录后，学员的实收金额和欠费金额将自动回退。确定要删除吗？"
+        title="确认撤销"
+        message="撤销缴费记录后，学员的实收金额和欠费金额将自动回退，并生成冲销凭证。确定要撤销吗？"
         onConfirm={handleDeletePayment}
         onCancel={() => setDeletePaymentId(null)}
       />
@@ -798,12 +886,12 @@ export default function StudentPayment() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '14px' }}>
               <div>
                 <strong>合同金额：</strong>
-                <span>¥{parseFloat(selectedStudent?.contract_amount || 0).toFixed(2)}</span>
+                <span>¥{toNumber(selectedStudent?.contract_amount).toFixed(2)}</span>
               </div>
               <div>
                 <strong>当前实收金额：</strong>
                 <span style={{ color: '#409eff', fontWeight: 'bold' }}>
-                  ¥{parseFloat(selectedStudent?.actual_amount || 0).toFixed(2)}
+                  ¥{toNumber(selectedStudent?.actual_amount).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -815,7 +903,7 @@ export default function StudentPayment() {
               type="number"
               step="0.01"
               min="0.01"
-              max={parseFloat(selectedStudent?.actual_amount || 0)}
+              max={toNumber(selectedStudent?.actual_amount)}
               value={discountForm.amount}
               onChange={(e) => {
                 const value = e.target.value;
@@ -828,7 +916,7 @@ export default function StudentPayment() {
               placeholder="请输入减免金额"
             />
             <small style={{ color: '#999', display: 'block', marginTop: '4px' }}>
-              最大可减免金额：¥{parseFloat(selectedStudent?.actual_amount || 0).toFixed(2)}
+              最大可减免金额：¥{toNumber(selectedStudent?.actual_amount).toFixed(2)}
             </small>
             <small style={{ color: '#e6a23c', display: 'block', marginTop: '4px' }}>
               减免后实收金额 = 当前实收金额 - 减免金额
@@ -876,16 +964,25 @@ export default function StudentPayment() {
       >
         {submitConfirmInfo && (
           <div style={{ padding: '10px 0' }}>
+            {/* 已上缴提示 */}
+            {(submitConfirmInfo.student as any).submit_status === '已上缴' && (
+              <div style={{ marginBottom: '16px', padding: '12px', background: '#fff7e6', borderRadius: '4px', border: '1px solid #ffc069' }}>
+                <div style={{ color: '#d46b08', fontWeight: 'bold' }}>
+                  该学员已于 {(submitConfirmInfo.student as any).submit_date} 完成上缴确认
+                </div>
+              </div>
+            )}
+
             {/* 学员基本信息 */}
             <div style={{ marginBottom: '20px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
               <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>学员信息</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '14px' }}>
                 <div><strong>姓名：</strong>{submitConfirmInfo.student.name}</div>
                 <div><strong>班型：</strong>{submitConfirmInfo.student.class_type_name || '-'}</div>
-                <div><strong>合同金额：</strong>¥{parseFloat(submitConfirmInfo.student.contract_amount || '0').toFixed(2)}</div>
-                <div><strong>实收金额：</strong>¥{parseFloat(submitConfirmInfo.student.actual_amount || '0').toFixed(2)}</div>
-                <div><strong>账户余额：</strong>¥{parseFloat(submitConfirmInfo.student.account_balance || '0').toFixed(2)}</div>
-                <div><strong>减免金额：</strong>¥{parseFloat(submitConfirmInfo.student.discount_amount || '0').toFixed(2)}</div>
+                <div><strong>合同金额：</strong>¥{toNumber(submitConfirmInfo.student.contract_amount).toFixed(2)}</div>
+                <div><strong>实收金额：</strong>¥{toNumber(submitConfirmInfo.student.actual_amount).toFixed(2)}</div>
+                <div><strong>账户余额：</strong>¥{toNumber(submitConfirmInfo.student.account_balance).toFixed(2)}</div>
+                <div><strong>减免金额：</strong>¥{toNumber(submitConfirmInfo.student.discount_amount).toFixed(2)}</div>
               </div>
             </div>
 
@@ -917,7 +1014,7 @@ export default function StudentPayment() {
             </div>
 
             {/* 利润计算结果 */}
-            <div style={{ padding: '16px', background: '#f6ffed', borderRadius: '8px', border: '2px solid #52c41a' }}>
+            <div style={{ padding: '16px', background: '#f6ffed', borderRadius: '8px', border: '2px solid #52c41a', marginBottom: '20px' }}>
               <h4 style={{ margin: '0 0 16px 0', color: '#52c41a', textAlign: 'center' }}>利润核算</h4>
               <div style={{ fontSize: '14px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -940,14 +1037,98 @@ export default function StudentPayment() {
               </div>
             </div>
 
-            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            {/* 上缴操作表单 - 未上缴时显示上缴表单，已上缴时显示撤销表单 */}
+            {(submitConfirmInfo.student as any).submit_status !== '已上缴' && submitConfirmInfo.config && (
+              <div style={{ marginBottom: '20px', padding: '12px', background: '#fafafa', borderRadius: '4px', border: '1px solid #d9d9d9' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>上缴操作</h4>
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>经办人 *</label>
+                  <input
+                    type="text"
+                    value={submitForm.operator}
+                    onChange={(e) => setSubmitForm({ ...submitForm, operator: e.target.value })}
+                    placeholder="请输入经办人姓名"
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>备注</label>
+                  <textarea
+                    value={submitForm.remark}
+                    onChange={(e) => setSubmitForm({ ...submitForm, remark: e.target.value })}
+                    placeholder="请输入备注信息（可选）"
+                    rows={2}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* 已上缴时显示撤销操作表单 */}
+            {(submitConfirmInfo.student as any).submit_status === '已上缴' && (
+              <div style={{ marginBottom: '20px', padding: '12px', background: '#fff1f0', borderRadius: '4px', border: '1px solid #ffa39e' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#cf1322' }}>撤销上缴</h4>
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>经办人 *</label>
+                  <input
+                    type="text"
+                    value={submitForm.operator}
+                    onChange={(e) => setSubmitForm({ ...submitForm, operator: e.target.value })}
+                    placeholder="请输入经办人姓名"
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>备注</label>
+                  <textarea
+                    value={submitForm.remark}
+                    onChange={(e) => setSubmitForm({ ...submitForm, remark: e.target.value })}
+                    placeholder="请输入撤销原因（可选）"
+                    rows={2}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '12px' }}>
               <button 
                 onClick={() => setShowSubmitConfirmModal(false)} 
-                className="btn btn-primary"
-                style={{ padding: '8px 40px' }}
+                className="btn btn-default"
+                style={{ padding: '8px 24px' }}
               >
-                确定
+                关闭
               </button>
+              {(submitConfirmInfo.student as any).submit_status !== '已上缴' && submitConfirmInfo.config && (
+                <button 
+                  onClick={handleExecuteSubmit}
+                  disabled={submitExecuting || !submitForm.operator}
+                  className="btn"
+                  style={{ 
+                    padding: '8px 24px', 
+                    backgroundColor: '#722ed1', 
+                    color: '#fff',
+                    opacity: (submitExecuting || !submitForm.operator) ? 0.6 : 1
+                  }}
+                >
+                  {submitExecuting ? '处理中...' : '确认上缴'}
+                </button>
+              )}
+              {(submitConfirmInfo.student as any).submit_status === '已上缴' && (
+                <button 
+                  onClick={handleExecuteRevoke}
+                  disabled={submitExecuting || !submitForm.operator}
+                  className="btn"
+                  style={{ 
+                    padding: '8px 24px', 
+                    backgroundColor: '#f5222d', 
+                    color: '#fff',
+                    opacity: (submitExecuting || !submitForm.operator) ? 0.6 : 1
+                  }}
+                >
+                  {submitExecuting ? '处理中...' : '撤销上缴'}
+                </button>
+              )}
             </div>
           </div>
         )}

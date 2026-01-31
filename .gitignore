@@ -1,0 +1,41 @@
+# 依赖目录
+node_modules/
+
+# 构建产物
+dist/
+build/
+
+# 环境变量文件 (包含敏感信息)
+.env
+.env.local
+.env.*.local
+server/.env
+
+# 日志文件
+*.log
+logs/
+
+# 编辑器配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 测试覆盖率
+coverage/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# SSL证书 (敏感)
+*.pem
+*.key
+*.crt
+ssl/
+certs/

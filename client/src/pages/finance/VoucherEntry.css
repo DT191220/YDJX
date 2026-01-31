@@ -1,14 +1,14 @@
 .voucher-form {
-  background: #fff;
+  background: var(--color-bg-card);
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .voucher-header {
   margin-bottom: 20px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .voucher-header .form-row {
@@ -24,13 +24,13 @@
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .voucher-header .form-group input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
@@ -42,24 +42,24 @@
 .voucher-table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--color-bg-card);
 }
 
 .voucher-table th,
 .voucher-table td {
   padding: 12px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--color-border);
   text-align: left;
 }
 
 .voucher-table th {
-  background: #fafafa;
+  background: var(--color-bg-alt);
   font-weight: 500;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .voucher-table tbody tr:hover {
-  background: #f5f5f5;
+  background: var(--color-bg-alt);
 }
 
 .entry-type-select,
@@ -68,7 +68,7 @@
 .amount-input {
   width: 100%;
   padding: 8px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
@@ -82,25 +82,25 @@
 }
 
 .amount-input.debit:focus {
-  border-color: #1890ff;
+  border-color: var(--color-primary-light);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .amount-input.credit:focus {
-  border-color: #52c41a;
+  border-color: var(--color-success);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.2);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
 }
 
 .empty-cell {
   display: block;
   text-align: center;
-  color: #bfbfbf;
+  color: var(--color-text-muted);
 }
 
 .total-row {
-  background: #fafafa;
+  background: var(--color-bg-alt);
   font-weight: bold;
 }
 
@@ -109,17 +109,17 @@
 }
 
 .total-debit {
-  color: #1890ff;
+  color: var(--color-primary-light);
   text-align: right;
 }
 
 .total-credit {
-  color: #52c41a;
+  color: var(--color-success);
   text-align: right;
 }
 
 .balance-warning {
-  background: #fff2f0;
+  background: #fef2f2;
 }
 
 .balance-warning td {
@@ -139,53 +139,53 @@
 }
 
 .btn-info {
-  background: #1890ff;
+  background: var(--color-info);
   color: #fff;
   border: none;
 }
 
 .btn-info:hover {
-  background: #40a9ff;
+  background: #0369a1;
 }
 
 .btn-success {
-  background: #52c41a;
+  background: var(--color-success);
   color: #fff;
   border: none;
 }
 
 .btn-success:hover {
-  background: #73d13d;
+  background: #047857;
 }
 
 .text-blue {
-  color: #1890ff;
+  color: var(--color-info);
 }
 
 .text-green {
-  color: #52c41a;
+  color: var(--color-success);
 }
 
 .badge-blue {
-  background: #e6f7ff;
-  color: #1890ff;
-  border: 1px solid #91d5ff;
+  background: #dbeafe;
+  color: var(--color-info);
+  border: 1px solid #93c5fd;
 }
 
 .badge-red {
-  background: #fff2f0;
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
+  background: #fef2f2;
+  color: var(--color-error);
+  border: 1px solid #fecaca;
 }
 
 .badge-purple {
-  background: #f9f0ff;
-  color: #722ed1;
-  border: 1px solid #d3adf7;
+  background: #ede9fe;
+  color: var(--color-chart-4);
+  border: 1px solid #c4b5fd;
 }
 
 .badge-orange {
-  background: #fff7e6;
-  color: #fa8c16;
-  border: 1px solid #ffd591;
+  background: #fef3c7;
+  color: var(--color-warning);
+  border: 1px solid #fcd34d;
 }

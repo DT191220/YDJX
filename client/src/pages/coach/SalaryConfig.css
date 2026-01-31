@@ -12,7 +12,7 @@
 .page-header h2 {
   margin: 0;
   font-size: 24px;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .filter-bar {
@@ -25,7 +25,7 @@
 .search-input,
 .filter-select {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
@@ -41,7 +41,7 @@
 
 .btn-primary {
   padding: 10px 20px;
-  background-color: #1890ff;
+  background-color: var(--color-primary-light);
   color: white;
   border: none;
   border-radius: 4px;
@@ -51,7 +51,7 @@
 }
 
 .btn-primary:hover {
-  background-color: #40a9ff;
+  background-color: #1d4ed8;
 }
 
 .action-buttons {
@@ -70,7 +70,7 @@
 }
 
 .btn-edit {
-  background-color: #52c41a;
+  background-color: var(--color-success);
   color: white;
 }
 
@@ -79,7 +79,7 @@
 }
 
 .btn-delete {
-  background-color: #ff4d4f;
+  background-color: var(--color-error);
   color: white;
 }
 
@@ -107,7 +107,7 @@
 
 .form-group label {
   font-size: 14px;
-  color: #333;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
@@ -115,7 +115,7 @@
 .form-group select,
 .form-group textarea {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
   font-family: inherit;
@@ -125,9 +125,9 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #1890ff;
+  border-color: var(--color-primary-light);
 }
 
 .required {
-  color: #ff4d4f;
+  color: var(--color-error);
 }

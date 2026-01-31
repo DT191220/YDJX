@@ -1,8 +1,8 @@
 .users-page {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .page-header {
@@ -15,11 +15,11 @@
 .page-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-primary-light);
   color: white;
   border: none;
   padding: 0.625rem 1.5rem;
@@ -31,12 +31,12 @@
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
 }
 
 .error-message {
-  background: #fee;
-  color: #c33;
+  background: #fef2f2;
+  color: var(--color-error);
   padding: 0.75rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -51,19 +51,19 @@
 .search-input {
   flex: 1;
   padding: 0.625rem 1rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 0.95rem;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-primary-light);
 }
 
 .filter-select {
   padding: 0.625rem 1rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 0.95rem;
   cursor: pointer;
@@ -78,13 +78,13 @@
 }
 
 .status-active {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: #ecfdf5;
+  color: var(--color-success);
 }
 
 .status-inactive {
-  background: #ffebee;
-  color: #c62828;
+  background: #fef2f2;
+  color: var(--color-error);
 }
 
 .action-buttons {
@@ -102,21 +102,21 @@
 }
 
 .btn-edit {
-  background: #2196f3;
+  background: var(--color-info);
   color: white;
 }
 
 .btn-edit:hover {
-  background: #1976d2;
+  background: #0369a1;
 }
 
 .btn-delete {
-  background: #f44336;
+  background: var(--color-error);
   color: white;
 }
 
 .btn-delete:hover {
-  background: #d32f2f;
+  background: #b91c1c;
 }
 
 .form-group {
@@ -127,14 +127,14 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
   padding: 0.625rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 0.95rem;
 }
@@ -142,11 +142,11 @@
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-primary-light);
 }
 
 .form-group input:disabled {
-  background: #f5f5f5;
+  background: var(--color-bg-alt);
   cursor: not-allowed;
 }
 
@@ -155,7 +155,7 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.5rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   min-height: 40px;
 }
@@ -165,14 +165,14 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.5rem;
-  background: #f5f5f5;
+  background: var(--color-bg-alt);
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .role-checkbox-item:hover {
-  background: #e8e8e8;
+  background: var(--color-border);
 }
 
 .role-checkbox-item input[type="checkbox"] {
@@ -182,10 +182,10 @@
 
 .role-checkbox-item span {
   font-size: 0.9rem;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .no-roles {
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 0.9rem;
 }

@@ -9,11 +9,11 @@
 .page-header h2 {
   margin: 0;
   font-size: 24px;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .filter-section {
-  background: #fff;
+  background: var(--color-bg-card);
   padding: 15px;
   border-radius: 4px;
   margin-bottom: 20px;
@@ -28,22 +28,22 @@
 .search-input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
 
 .filter-row select {
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
-  background-color: #fff;
+  background-color: var(--color-bg-card);
   cursor: pointer;
 }
 
 .table-container {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -51,14 +51,14 @@
 .progress-bar {
   width: 100%;
   height: 24px;
-  background-color: #f0f0f0;
+  background-color: var(--color-bg-alt);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
+  background: linear-gradient(90deg, var(--color-success) 0%, #047857 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -74,10 +74,10 @@
 
 .form-group-title {
   font-weight: bold;
-  color: #333;
+  color: var(--color-text-primary);
   margin: 15px 0 10px;
   padding-bottom: 5px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .form-row {
@@ -95,7 +95,7 @@
 .form-group label {
   display: block;
   margin-bottom: 5px;
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -103,13 +103,13 @@
 .form-group select {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }
 
 .required {
-  color: #f44336;
+  color: var(--color-error);
 }
 
 .badge {
@@ -121,18 +121,18 @@
 }
 
 .badge-default {
-  background-color: #e0e0e0;
-  color: #666;
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .badge-success {
-  background-color: #c8e6c9;
-  color: #2e7d32;
+  background-color: #ecfdf5;
+  color: var(--color-success);
 }
 
 .badge-danger {
-  background-color: #ffcdd2;
-  color: #c62828;
+  background-color: #fef2f2;
+  color: var(--color-error);
 }
 
 .subject-cell {
@@ -148,7 +148,7 @@
 }
 
 .exam-count {
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .failed-count {
@@ -156,22 +156,22 @@
 }
 
 .warning-medium {
-  color: #f57f17;
+  color: var(--color-warning);
 }
 
 .warning-high {
-  color: #ff6f00;
+  color: #ea580c;
 }
 
 .warning-critical {
-  color: #d32f2f;
+  color: var(--color-error);
 }
 
 .disqualified-badge {
   display: inline-block;
   margin-left: 8px;
   padding: 2px 8px;
-  background-color: #d32f2f;
+  background-color: var(--color-error);
   color: white;
   font-size: 11px;
   border-radius: 8px;
@@ -193,10 +193,10 @@
 }
 
 .btn-primary {
-  background-color: #1976d2;
+  background-color: var(--color-primary-light);
   color: white;
 }
 
 .btn-primary:hover {
-  background-color: #1565c0;
+  background-color: #1d4ed8;
 }

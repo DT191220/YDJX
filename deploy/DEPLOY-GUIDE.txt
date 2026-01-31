@@ -1,0 +1,471 @@
+================================================================================
+                    驾校通 Ubuntu 部署指南
+                    版本: 1.0
+                    更新日期: 2026-01-29
+================================================================================
+
+目录
+================================================================================
+一、部署前准备
+二、方式一：Docker一键部署（推荐）
+三、方式二：手动部署
+四、SSL证书配置
+五、数据库初始化
+六、常见问题排查
+七、运维命令参考
+
+================================================================================
+一、部署前准备
+================================================================================
+
+1. 服务器要求
+---------------------------------------------------------------------------
+- 操作系统: Ubuntu 20.04/22.04 LTS
+- CPU: 2核及以上
+- 内存: 4GB及以上
+- 硬盘: 40GB及以上
+- 网络: 公网IP（如需外网访问）
+
+2. 需要准备的信息
+---------------------------------------------------------------------------
+请提前准备以下配置信息：
+
+| 配置项        | 说明                          | 示例                         |
+|--------------|-------------------------------|------------------------------|
+| DB_PASSWORD  | 数据库密码                     | MyStr0ngP@ssw0rd             |
+| JWT_SECRET   | JWT认证密钥（至少32位）         | openssl rand -base64 32      |
+| ENCRYPT_KEY  | 前后端通信加密密钥              | YourEncryptKey2024!@#        |
+| 域名(可选)   | 用于HTTPS访问                  | jiaxiao.example.com          |
+
+生成随机密钥的命令：
+  openssl rand -base64 32
+
+3. 开放端口
+---------------------------------------------------------------------------
+确保以下端口可访问：
+- 22   (SSH)
+- 80   (HTTP)
+- 443  (HTTPS)
+- 3306 (MySQL，仅内部访问，不建议对外开放)
+
+
+================================================================================
+二、方式一：Docker一键部署（推荐）
+================================================================================
+
+此方式最简单，推荐新手使用。
+
+Step 1: 上传项目代码
+---------------------------------------------------------------------------
+# 在本地打包项目（排除node_modules）
+cd d:\develop20260114\YDJX
+tar --exclude='node_modules' --exclude='.git' -czvf jiaxiaotong.tar.gz .
+
+# 使用 scp 上传到服务器
+scp jiaxiaotong.tar.gz root@YOUR_SERVER_IP:/opt/
+
+# 或使用 FTP/SFTP 工具上传
+
+Step 2: 登录服务器并解压
+---------------------------------------------------------------------------
+# SSH登录服务器
+ssh root@YOUR_SERVER_IP
+
+# 创建部署目录并解压
+mkdir -p /opt/jiaxiaotong
+cd /opt/jiaxiaotong
+tar -xzvf /opt/jiaxiaotong.tar.gz
+
+Step 3: 运行一键部署脚本
+---------------------------------------------------------------------------
+# 赋予执行权限
+chmod +x deploy/ubuntu-deploy.sh
+
+# 运行部署脚本
+sudo ./deploy/ubuntu-deploy.sh
+
+# 脚本会自动完成：
+# - 系统更新
+# - Docker 安装
+# - Docker Compose 安装
+# - 环境变量配置
+# - 镜像构建
+# - 服务启动
+# - 防火墙配置
+
+Step 4: 验证部署
+---------------------------------------------------------------------------
+# 查看服务状态
+docker compose ps
+
+# 期望输出:
+# NAME                    STATUS
+# jiaxiaotong-mysql       running
+# jiaxiaotong-server      running
+# jiaxiaotong-client      running
+
+# 访问测试
+curl http://localhost/api/health
+
+# 浏览器访问
+http://YOUR_SERVER_IP
+
+
+================================================================================
+三、方式二：手动部署
+================================================================================
+
+此方式适合需要更多控制或不使用Docker的场景。
+
+Step 1: 系统更新
+---------------------------------------------------------------------------
+sudo apt update && sudo apt upgrade -y
+
+Step 2: 安装 Node.js 18
+---------------------------------------------------------------------------
+# 安装 NodeSource 仓库
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+
+# 安装 Node.js
+sudo apt install -y nodejs
+
+# 验证安装
+node --version  # 期望: v18.x.x
+npm --version   # 期望: 9.x.x 或更高
+
+Step 3: 安装 MySQL 8.0
+---------------------------------------------------------------------------
+# 安装 MySQL
+sudo apt install -y mysql-server
+
+# 启动 MySQL
+sudo systemctl start mysql
+sudo systemctl enable mysql
+
+# 安全配置
+sudo mysql_secure_installation
+# 按提示设置root密码，移除匿名用户等
+
+# 创建数据库和用户
+sudo mysql -u root -p
+>>> CREATE DATABASE yuandong_driving_school CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+>>> CREATE USER 'jiaxiao'@'localhost' IDENTIFIED BY 'YOUR_DB_PASSWORD';
+>>> GRANT ALL PRIVILEGES ON yuandong_driving_school.* TO 'jiaxiao'@'localhost';
+>>> FLUSH PRIVILEGES;
+>>> EXIT;
+
+Step 4: 安装 Nginx
+---------------------------------------------------------------------------
+# 安装 Nginx
+sudo apt install -y nginx
+
+# 启动 Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# 验证
+curl http://localhost
+
+Step 5: 安装 PM2（进程管理）
+---------------------------------------------------------------------------
+sudo npm install -g pm2
+
+Step 6: 上传并构建项目
+---------------------------------------------------------------------------
+# 创建部署目录
+sudo mkdir -p /var/www/jiaxiaotong
+cd /var/www/jiaxiaotong
+
+# 上传项目代码（参考Docker部署的Step 1）
+
+# 构建后端
+cd server
+npm install
+npm run build
+
+# 创建后端环境变量
+cat > .env << 'EOF'
+PORT=3001
+NODE_ENV=production
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=jiaxiao
+DB_PASSWORD=YOUR_DB_PASSWORD
+DB_NAME=yuandong_driving_school
+JWT_SECRET=YOUR_JWT_SECRET
+ENCRYPT_KEY=YOUR_ENCRYPT_KEY
+LOG_DIR=/var/log/jiaxiaotong
+LOG_LEVEL=info
+EOF
+
+# 构建前端
+cd ../client
+npm install
+npm run build
+
+Step 7: 配置 Nginx
+---------------------------------------------------------------------------
+# 创建 Nginx 配置
+sudo nano /etc/nginx/sites-available/jiaxiaotong
+
+# 写入以下内容：
+server {
+    listen 80;
+    server_name YOUR_DOMAIN_OR_IP;
+
+    # 前端静态文件
+    root /var/www/jiaxiaotong/client/dist;
+    index index.html;
+
+    # Gzip压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript;
+
+    # SPA路由
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # API代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:3001/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# 启用配置
+sudo ln -s /etc/nginx/sites-available/jiaxiaotong /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default  # 删除默认配置
+sudo nginx -t  # 测试配置
+sudo systemctl reload nginx
+
+Step 8: 使用 PM2 启动后端
+---------------------------------------------------------------------------
+cd /var/www/jiaxiaotong/server
+
+# 创建 PM2 配置
+cat > ecosystem.config.js << 'EOF'
+module.exports = {
+  apps: [{
+    name: 'jiaxiaotong-server',
+    script: 'dist/index.js',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production'
+    }
+  }]
+};
+EOF
+
+# 启动服务
+pm2 start ecosystem.config.js
+
+# 设置开机自启
+pm2 startup
+pm2 save
+
+# 查看状态
+pm2 status
+
+Step 9: 配置防火墙
+---------------------------------------------------------------------------
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+
+Step 10: 验证部署
+---------------------------------------------------------------------------
+# 检查后端
+curl http://localhost:3001/api/health
+
+# 检查前端
+curl http://localhost
+
+# 浏览器访问
+http://YOUR_SERVER_IP
+
+
+================================================================================
+四、SSL证书配置
+================================================================================
+
+方式A: Let's Encrypt 免费证书（推荐）
+---------------------------------------------------------------------------
+# 安装 Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# 申请证书（需要已配置域名解析）
+sudo certbot --nginx -d your-domain.com
+
+# 自动续期测试
+sudo certbot renew --dry-run
+
+# Certbot 会自动修改 Nginx 配置，添加SSL支持
+
+方式B: 自签名证书（仅测试）
+---------------------------------------------------------------------------
+# 生成自签名证书
+cd /opt/jiaxiaotong/deploy
+chmod +x generate-ssl-cert.sh
+./generate-ssl-cert.sh your-domain.com /etc/nginx/ssl
+
+# 修改 Nginx 配置启用 SSL
+# 参考 deploy/nginx.conf 中的 SSL 配置部分
+
+
+================================================================================
+五、数据库初始化
+================================================================================
+
+Docker部署方式
+---------------------------------------------------------------------------
+# 进入MySQL容器
+docker exec -it jiaxiaotong-mysql mysql -u root -p
+
+# 执行初始化SQL
+SOURCE /docker-entrypoint-initdb.d/init.sql;
+SOURCE /docker-entrypoint-initdb.d/system-tables.sql;
+# ... 按需执行其他SQL文件
+
+手动部署方式
+---------------------------------------------------------------------------
+cd /var/www/jiaxiaotong/database
+
+# 执行初始化SQL
+mysql -u jiaxiao -p yuandong_driving_school < init.sql
+mysql -u jiaxiao -p yuandong_driving_school < system-tables.sql
+mysql -u jiaxiao -p yuandong_driving_school < payment_tables.sql
+# ... 按需执行其他SQL文件
+
+
+================================================================================
+六、常见问题排查
+================================================================================
+
+1. 服务无法启动
+---------------------------------------------------------------------------
+# 查看Docker日志
+docker compose logs -f server
+docker compose logs -f mysql
+
+# 查看PM2日志
+pm2 logs jiaxiaotong-server
+
+# 常见原因：
+# - 数据库连接失败：检查DB_HOST, DB_PASSWORD配置
+# - 端口被占用：netstat -tlnp | grep 3001
+# - 权限问题：检查文件权限
+
+2. 数据库连接失败
+---------------------------------------------------------------------------
+# Docker方式：检查容器网络
+docker network ls
+docker exec -it jiaxiaotong-server ping mysql
+
+# 手动方式：检查MySQL状态
+sudo systemctl status mysql
+mysql -u jiaxiao -p  # 测试连接
+
+3. Nginx 502 Bad Gateway
+---------------------------------------------------------------------------
+# 检查后端是否运行
+curl http://localhost:3001/api/health
+
+# 检查Nginx配置
+sudo nginx -t
+sudo tail -f /var/log/nginx/error.log
+
+4. 前端页面空白
+---------------------------------------------------------------------------
+# 检查构建产物
+ls -la /var/www/jiaxiaotong/client/dist/
+
+# 检查Nginx root路径配置
+# 检查浏览器控制台错误
+
+5. 跨域错误
+---------------------------------------------------------------------------
+# 检查后端CORS配置
+# 确保API通过Nginx代理访问，而非直接访问后端端口
+
+
+================================================================================
+七、运维命令参考
+================================================================================
+
+Docker 部署
+---------------------------------------------------------------------------
+# 进入部署目录
+cd /opt/jiaxiaotong
+
+# 查看服务状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f           # 所有服务
+docker compose logs -f server    # 仅后端
+docker compose logs -f mysql     # 仅数据库
+
+# 重启服务
+docker compose restart           # 重启所有
+docker compose restart server    # 重启后端
+
+# 停止服务
+docker compose down
+
+# 启动服务
+docker compose up -d
+
+# 重新构建
+docker compose build --no-cache
+docker compose up -d
+
+# 进入容器
+docker exec -it jiaxiaotong-server sh
+docker exec -it jiaxiaotong-mysql mysql -u root -p
+
+# 备份数据库
+docker exec jiaxiaotong-mysql mysqldump -u root -p yuandong_driving_school > backup_$(date +%Y%m%d).sql
+
+手动部署
+---------------------------------------------------------------------------
+# PM2 命令
+pm2 status                       # 查看状态
+pm2 logs jiaxiaotong-server      # 查看日志
+pm2 restart jiaxiaotong-server   # 重启
+pm2 stop jiaxiaotong-server      # 停止
+pm2 delete jiaxiaotong-server    # 删除
+
+# Nginx 命令
+sudo systemctl status nginx      # 状态
+sudo systemctl reload nginx      # 重载配置
+sudo systemctl restart nginx     # 重启
+
+# MySQL 命令
+sudo systemctl status mysql      # 状态
+sudo systemctl restart mysql     # 重启
+
+# 备份数据库
+mysqldump -u jiaxiao -p yuandong_driving_school > backup_$(date +%Y%m%d).sql
+
+# 恢复数据库
+mysql -u jiaxiao -p yuandong_driving_school < backup_20260129.sql
+
+
+================================================================================
+                              部署指南结束
+================================================================================

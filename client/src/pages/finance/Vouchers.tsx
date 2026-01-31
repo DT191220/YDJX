@@ -10,7 +10,12 @@ import '../system/Students.css';
 
 const SOURCE_TYPE_MAP: Record<string, string> = {
   'student_payment': '学员缴费',
+  'payment_reversal': '缴费冲销',
+  'student_discount': '学员减免',
+  'discount_reversal': '减免冲销',
   'coach_salary': '教练工资',
+  'submit_confirm': '上缴确认',
+  'submit_revoke': '撤销上缴',
   'manual': '手动录入'
 };
 
@@ -93,7 +98,12 @@ export default function Vouchers() {
   const getSourceTypeBadge = (type: string) => {
     const badges: Record<string, string> = {
       'student_payment': 'badge-green',
+      'payment_reversal': 'badge-red',
+      'student_discount': 'badge-yellow',
+      'discount_reversal': 'badge-red',
       'coach_salary': 'badge-orange',
+      'submit_confirm': 'badge-purple',
+      'submit_revoke': 'badge-red',
       'manual': 'badge-blue'
     };
     return badges[type] || 'badge-gray';

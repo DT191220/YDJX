@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './config/database';
+import logger from './utils/logger';
+import { requestLogger, errorHandler, notFoundHandler } from './middleware/logging';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import roleRoutes from './routes/roles';
@@ -22,16 +24,20 @@ import salaryConfigRoutes from './routes/salaryConfig';
 import coachSalaryRoutes from './routes/coachSalary';
 import financeRoutes from './routes/finance';
 import menuRoutes from './routes/menus';
+import operationExpenseRoutes from './routes/operationExpense';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 中间件
+// 基础中间件
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 请求日志中间件
+app.use(requestLogger);
 
 // 设置响应头字符编码
 app.use((req, res, next) => {
@@ -60,6 +66,7 @@ app.use('/api/salary-config', salaryConfigRoutes);
 app.use('/api/coach-salary', coachSalaryRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/menus', menuRoutes);
+app.use('/api/operation-expense', operationExpenseRoutes);
 
 // 健康检查接口
 app.get('/api/health', (req, res) => {
@@ -83,8 +90,15 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
+// 404 处理 (必须在所有路由之后)
+app.use(notFoundHandler);
+
+// 全局错误处理 (必须在最后)
+app.use(errorHandler);
+
 // 启动服务器
 app.listen(PORT, () => {
+  logger.info(`服务器启动成功`, { port: PORT, env: process.env.NODE_ENV || 'development' });
   console.log(`服务器运行在 http://localhost:${PORT}`);
 });
 

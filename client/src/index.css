@@ -1,17 +1,147 @@
-* {
+/* === Google Fonts === */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ========================================
+   驾校管理系统 - 专业设计系统
+   风格: Soft UI Evolution
+   配色: 领航蓝专业版
+   ======================================== */
+
+:root {
+  /* === 主色调 === */
+  --color-primary: #1e3a5f;           /* 领航蓝深 - 导航、标题 */
+  --color-primary-light: #2563eb;     /* 领航蓝亮 - 按钮、链接 */
+  --color-primary-dark: #0f172a;      /* 领航蓝暗 - 强调 */
+  
+  /* === 辅助色 === */
+  --color-secondary: #64748b;         /* 石墨灰 */
+  --color-accent: #0ea5e9;            /* 天际蓝 - 高亮 */
+  
+  /* === 背景色 === */
+  --color-bg-main: #f8fafc;           /* 主背景 */
+  --color-bg-card: #ffffff;           /* 卡片背景 */
+  --color-bg-elevated: #ffffff;       /* 浮层背景 */
+  --color-bg-subtle: #f1f5f9;         /* 次级背景 */
+  
+  /* === 边框色 === */
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+  --color-border-focus: #2563eb;
+  
+  /* === 功能色 === */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #0ea5e9;
+  
+  /* === 文字色 === */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+  
+  /* === 图表色 === */
+  --color-chart-1: #2563eb;
+  --color-chart-2: #10b981;
+  --color-chart-3: #f59e0b;
+  --color-chart-4: #8b5cf6;
+  --color-chart-5: #ef4444;
+  --color-chart-6: #06b6d4;
+  --color-chart-7: #ec4899;
+  --color-chart-8: #14b8a6;
+  
+  /* === Soft UI 阴影 === */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+  --shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  
+  /* === 圆角 === */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* === 动画 === */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+  
+  /* === 字体 === */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  
+  /* === 间距 === */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+}
+
+/* === 深色模式预留 === */
+@media (prefers-color-scheme: dark) {
+  :root.dark-mode {
+    --color-bg-main: #0f172a;
+    --color-bg-card: #1e293b;
+    --color-bg-subtle: #334155;
+    --color-border: #334155;
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+  }
+}
+
+/* === 全局重置 === */
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* === 链接 === */
+a {
+  color: var(--color-primary-light);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary);
+}
+
+/* === 焦点状态 === */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* === 容器 === */
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 var(--spacing-5);
 }

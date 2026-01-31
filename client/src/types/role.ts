@@ -5,6 +5,7 @@ export interface Role {
   role_code: string;
   description?: string;
   status: '启用' | '禁用';
+  sort_order?: number;
   created_at: string;
   updated_at: string;
   permission_count?: number;
@@ -16,6 +17,7 @@ export interface RoleFormData {
   role_code: string;
   description?: string;
   status: '启用' | '禁用';
+  sort_order?: number;
   permission_ids?: number[];
 }
 
@@ -23,5 +25,7 @@ export interface RoleListParams {
   limit: number;
   offset: number;
   keyword?: string;
-  status?: '启用' | '禁用';
+  status?: '启用' | '禁用' | '';
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }

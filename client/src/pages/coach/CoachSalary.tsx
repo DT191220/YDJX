@@ -428,8 +428,8 @@ function SalaryEditModal({ salary, onClose, onSuccess }: SalaryEditModalProps) {
     remarks: salary.remarks || ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
     if (formData.deduction && formData.deduction > 0 && !formData.deduction_reason) {
       alert('扣薪大于0时必须填写扣薪原因');

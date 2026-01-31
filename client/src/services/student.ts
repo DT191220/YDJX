@@ -3,8 +3,10 @@ import { Student, StudentFormData, StudentQueryParams } from '../types/student';
 
 export interface EnrollmentStatistics {
   year: number;
+  month: number;
+  currentTotal: number;
   yearTotal: number;
-  lastYearTotal: number;
+  lastPeriodTotal: number;
   monthlyStats: {
     month: string;
     monthName: string;
@@ -16,6 +18,11 @@ export interface EnrollmentStatistics {
   }[];
   byCoach: {
     coach_name: string;
+    count: number;
+  }[];
+  coachClassType: {
+    coach_name: string;
+    class_type_name: string;
     count: number;
   }[];
 }
@@ -53,6 +60,11 @@ export const studentService = {
   deleteStudent: (id: number) => api.delete(`/students/${id}`),
 
   // 获取招生统计数据
-  getEnrollmentStatistics: (year?: number) => 
-    api.get<EnrollmentStatistics>(`/students/statistics/enrollment${year ? `?year=${year}` : ''}`),
+  getEnrollmentStatistics: (year?: number, month?: number) => {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (month !== undefined) params.append('month', month.toString());
+    const queryString = params.toString();
+    return api.get<EnrollmentStatistics>(`/students/statistics/enrollment${queryString ? `?${queryString}` : ''}`);
+  },
 };

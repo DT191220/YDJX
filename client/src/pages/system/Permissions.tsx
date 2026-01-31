@@ -66,7 +66,7 @@ export default function Permissions() {
     setExpandedKeys(newExpanded);
   };
 
-  const renderTreeNode = (node: Permission, level: number) => {
+  const renderTreeNode = (node: Permission, _level: number) => {
     const typeMap: Record<string, string> = {
       'menu': '菜单',
       'button': '按钮',
@@ -115,8 +115,8 @@ export default function Permissions() {
 
       <div className="permissions-tree">
         <Tree
-          data={permissions as TreeNode[]}
-          renderNode={renderTreeNode}
+          data={permissions as unknown as TreeNode[]}
+          renderNode={renderTreeNode as (node: TreeNode, level: number) => React.ReactNode}
           expandedKeys={expandedKeys}
           onToggle={handleToggle}
         />

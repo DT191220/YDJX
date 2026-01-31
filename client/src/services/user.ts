@@ -2,8 +2,8 @@ import CryptoJS from 'crypto-js';
 import { api } from './api';
 import { User, UserFormData, UserListParams } from '../types/user';
 
-// 加密密钥（与后端保持一致）
-const ENCRYPT_KEY = 'YuanDongDrivingSchool2024!@#';
+// 加密密钥从环境变量读取（与后端保持一致）
+const ENCRYPT_KEY = import.meta.env.VITE_ENCRYPT_KEY || 'YuanDongDrivingSchool2024!@#';
 
 // 加密密码
 function encryptPassword(password: string): string {

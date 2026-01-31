@@ -4,6 +4,7 @@ export interface DictType {
   dict_name: string;
   dict_type: string;
   description?: string;
+  remark?: string;
   status: '启用' | '禁用';
   created_at: string;
   updated_at: string;
@@ -25,6 +26,7 @@ export interface DictTypeFormData {
   dict_name: string;
   dict_type: string;
   description?: string;
+  remark?: string;
   status: '启用' | '禁用';
 }
 
